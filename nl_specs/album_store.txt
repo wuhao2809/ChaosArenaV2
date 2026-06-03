@@ -1,0 +1,36 @@
+Album Store is a photo-album REST API. Users organize photos into named albums,
+upload photos asynchronously, and delete photos they no longer need.
+
+Albums:
+- Create or update an album with PUT /albums/<album_id>. The request body must
+  include a "title" field (string, required), and optionally "description" and
+  "owner". A missing or empty title must be rejected with a 400 error. Returns
+  the full album record; 201 on first creation, 200 on update.
+- Fetch a single album with GET /albums/<album_id>. Returns 404 if the album
+  does not exist.
+- List all albums with GET /albums. Returns a JSON array.
+
+Photos:
+- Upload a photo with POST /albums/<album_id>/photos. The server accepts the
+  upload immediately and processes it in the background. The response is 202
+  with a photo_id and status "processing". The album must exist first (404
+  otherwise). Payloads larger than 1 MB must be rejected with 413 (not 500).
+- Check upload status with GET /albums/<album_id>/photos/<photo_id>. Returns
+  the photo record with a "status" field: "processing", "completed", or
+  "failed". A completed record must include a "url" field. Returns 404 if the
+  photo does not exist (or belongs to a different album).
+- Delete a photo with DELETE /albums/<album_id>/photos/<photo_id>. Returns 200
+  or 204 on success, 404 if the photo does not exist. After a successful
+  delete, GET for that photo must immediately return 404 and continue to do so
+  — the background processing worker must not resurrect a deleted photo by
+  writing a "completed" status after the delete.
+
+Concurrency:
+- The service is expected to handle concurrent writes correctly. Multiple
+  simultaneous PUT requests for different album IDs must all persist. Concurrent
+  PUT requests to the same album_id must result in the most-recently-written
+  record being visible after all writes complete — no write may silently
+  disappear.
+
+Health:
+- GET /health returns 200 with {"status": "ok"} and should respond within 100ms.

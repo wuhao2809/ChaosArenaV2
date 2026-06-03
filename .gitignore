@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Environment / secrets
+.env
+.env.local
+*.pem
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Terraform (will exist Tuesday)
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# Logs / temp
+*.log
+tmp/
+
+# Run output (conversation dumps, can be large)
+agent/runs/*.json
+
+# Drafted spec JSON sidecars (markdown is kept; JSON is redundant)
+specs/*.json
+
+# Claude local settings
+**/.claude/settings.local.json
