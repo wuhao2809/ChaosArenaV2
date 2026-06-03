@@ -31,7 +31,10 @@ Thumbs.db
 tmp/
 
 # Run output (conversation dumps, can be large)
-agent/runs/*.json
+agent/memory/*.json
+
+# Per-turn trace data
+agent/trace/*.json
 
 # Drafted spec JSON sidecars (markdown is kept; JSON is redundant)
 specs/*.json

@@ -35,6 +35,7 @@ runner (see runner.py); they have schema entries here but no dispatch
 functions — the runner intercepts them.
 """
 
+import os
 import time
 import threading
 from collections import Counter
@@ -102,6 +103,43 @@ TOOL_SCHEMAS: list[dict] = [
                     "type": ["object", "null"],
                     "description": "Optional extra HTTP headers as key-value pairs.",
                 },
+                "multipart": {
+                    "type": ["object", "null"],
+                    "description": (
+                        "If set, sends as multipart/form-data instead of JSON. "
+                        "Use for file upload endpoints (e.g. POST /albums/:id/photos). "
+                        "The tool generates synthetic file bytes — no real file needed."
+                    ),
+                    "properties": {
+                        "field": {
+                            "type": "string",
+                            "description": "Form field name for the file, e.g. 'file' or 'photo'.",
+                        },
+                        "filename": {
+                            "type": "string",
+                            "description": "Filename to send, e.g. 'photo.jpg'.",
+                        },
+                        "content_type": {
+                            "type": "string",
+                            "description": (
+                                "MIME type of the file. "
+                                "Use 'image/jpeg' for a normal photo, "
+                                "'text/plain' or 'application/octet-stream' for non-image tests."
+                            ),
+                        },
+                        "size_bytes": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": (
+                                "Number of random bytes to generate as file content. "
+                                "Use 0 for empty-file test, "
+                                "1048577 for oversize test (1 MB + 1 byte), "
+                                "1024 for a typical small upload."
+                            ),
+                        },
+                    },
+                    "required": ["field"],
+                },
             },
             "required": ["method", "path"],
         },
@@ -162,6 +200,17 @@ TOOL_SCHEMAS: list[dict] = [
                         "Authorization headers are NOT auto-replayed."
                     ),
                 },
+                "multipart": {
+                    "type": ["object", "null"],
+                    "description": "Same as http_call multipart — sends multipart/form-data instead of JSON.",
+                    "properties": {
+                        "field": {"type": "string"},
+                        "filename": {"type": "string"},
+                        "content_type": {"type": "string"},
+                        "size_bytes": {"type": "integer", "minimum": 0},
+                    },
+                    "required": ["field"],
+                },
             },
             "required": ["session_id", "method", "path"],
         },
@@ -199,6 +248,17 @@ TOOL_SCHEMAS: list[dict] = [
                 "headers": {
                     "type": ["object", "null"],
                     "description": "Optional extra headers, same for all N requests.",
+                },
+                "multipart": {
+                    "type": ["object", "null"],
+                    "description": "Same as http_call multipart — sends multipart/form-data for all N concurrent requests.",
+                    "properties": {
+                        "field": {"type": "string"},
+                        "filename": {"type": "string"},
+                        "content_type": {"type": "string"},
+                        "size_bytes": {"type": "integer", "minimum": 0},
+                    },
+                    "required": ["field"],
                 },
             },
             "required": ["n", "method", "path"],
@@ -475,27 +535,57 @@ TOOL_SCHEMAS: list[dict] = [
 ]
 
 
+def _build_multipart(multipart: dict) -> tuple[dict, int]:
+    """Build a requests `files` dict from a multipart spec.
+
+    Returns (files_dict, size_bytes) where files_dict is passed to
+    requests.request(files=...). The tool generates synthetic random bytes —
+    no real file is required. This is sufficient for testing upload endpoints
+    that accept any binary payload.
+    """
+    field = multipart.get("field", "file")
+    filename = multipart.get("filename", "upload.bin")
+    content_type = multipart.get("content_type", "application/octet-stream")
+    size_bytes = int(multipart.get("size_bytes", 1024))
+    data = os.urandom(size_bytes) if size_bytes > 0 else b""
+    return {field: (filename, data, content_type)}, size_bytes
+
+
 def http_call(
     method: str,
     path: str,
     target: str,
     body: dict | None = None,
     headers: dict | None = None,
+    multipart: dict | None = None,
 ) -> dict[str, Any]:
     """Execute a single HTTP request against the target service."""
     if not path.startswith("/"):
         path = "/" + path
     url = target.rstrip("/") + path
 
+    # Multipart uploads need more time (especially oversize tests).
+    timeout = 30 if multipart else 10
+
     start = time.perf_counter()
     try:
-        response = requests.request(
-            method=method.upper(),
-            url=url,
-            json=body,
-            headers=headers or {},
-            timeout=10,
-        )
+        if multipart:
+            files, size_bytes = _build_multipart(multipart)
+            response = requests.request(
+                method=method.upper(),
+                url=url,
+                files=files,
+                headers=headers or {},
+                timeout=timeout,
+            )
+        else:
+            response = requests.request(
+                method=method.upper(),
+                url=url,
+                json=body,
+                headers=headers or {},
+                timeout=timeout,
+            )
         latency_ms = int((time.perf_counter() - start) * 1000)
 
         try:
@@ -524,6 +614,7 @@ def http_call_with_session(
     target: str,
     body: dict | None = None,
     headers: dict | None = None,
+    multipart: dict | None = None,
 ) -> dict[str, Any]:
     """Execute one HTTP request through a named persistent session.
 
@@ -535,16 +626,27 @@ def http_call_with_session(
     url = target.rstrip("/") + path
 
     sess = _get_or_create_session(session_id)
+    timeout = 30 if multipart else 10
 
     start = time.perf_counter()
     try:
-        response = sess.request(
-            method=method.upper(),
-            url=url,
-            json=body,
-            headers=headers or {},
-            timeout=10,
-        )
+        if multipart:
+            files, _ = _build_multipart(multipart)
+            response = sess.request(
+                method=method.upper(),
+                url=url,
+                files=files,
+                headers=headers or {},
+                timeout=timeout,
+            )
+        else:
+            response = sess.request(
+                method=method.upper(),
+                url=url,
+                json=body,
+                headers=headers or {},
+                timeout=timeout,
+            )
         latency_ms = int((time.perf_counter() - start) * 1000)
 
         try:
@@ -592,6 +694,7 @@ def parallel_n(
     target: str,
     body: dict | None = None,
     headers: dict | None = None,
+    multipart: dict | None = None,
 ) -> dict[str, Any]:
     """Fire N identical requests concurrently against the target."""
     statuses: list[int] = []
@@ -604,7 +707,7 @@ def parallel_n(
     max_workers = min(n, 50)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
-            executor.submit(http_call, method, path, target, body, headers)
+            executor.submit(http_call, method, path, target, body, headers, multipart)
             for _ in range(n)
         ]
         for f in as_completed(futures):
@@ -857,6 +960,7 @@ def dispatch_tool(name: str, input_args: dict, target: str) -> dict[str, Any]:
             target=target,
             body=input_args.get("body"),
             headers=input_args.get("headers"),
+            multipart=input_args.get("multipart"),
         )
     if name == "http_call_with_session":
         return http_call_with_session(
@@ -866,6 +970,7 @@ def dispatch_tool(name: str, input_args: dict, target: str) -> dict[str, Any]:
             target=target,
             body=input_args.get("body"),
             headers=input_args.get("headers"),
+            multipart=input_args.get("multipart"),
         )
     if name == "parallel_n":
         return parallel_n(
@@ -875,6 +980,7 @@ def dispatch_tool(name: str, input_args: dict, target: str) -> dict[str, Any]:
             target=target,
             body=input_args.get("body"),
             headers=input_args.get("headers"),
+            multipart=input_args.get("multipart"),
         )
     if name == "race_pair":
         return race_pair(

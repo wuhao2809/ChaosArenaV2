@@ -67,21 +67,40 @@ def _slice_section(text: str, section_name: str) -> str:
 
 
 def parse_spec(markdown: str) -> ParsedSpec:
-    """Parse a ChaosArena two-tier markdown spec into a structured form."""
-    required_section = _slice_section(markdown, "Required Test Categories")
+    """Parse a ChaosArena two-tier markdown spec into a structured form.
 
-    required: list[RequiredCategory] = []
-    headers = list(_R_HEADER_RE.finditer(required_section))
-    for i, m in enumerate(headers):
-        r_id = m.group(1)
-        title = m.group(2).strip()
-        body_start = m.end()
-        body_end = headers[i + 1].start() if i + 1 < len(headers) else len(required_section)
-        body = required_section[body_start:body_end].strip()
-        required.append(RequiredCategory(r_id=r_id, title=title, body=body))
+    Fault-tolerant: if the spec uses a non-standard format and no Rs are
+    found, returns an empty required list rather than raising. The runner
+    handles this gracefully — the agent still tracks Rs dynamically through
+    submit_verdict_for_R calls; cover_all enforcement is skipped.
+    """
+    try:
+        required_section = _slice_section(markdown, "Required Test Categories")
 
-    return ParsedSpec(
-        required=required,
-        open_exploration=_slice_section(markdown, "Open Exploration"),
-        out_of_scope=_slice_section(markdown, "Out of Scope"),
-    )
+        required: list[RequiredCategory] = []
+        headers = list(_R_HEADER_RE.finditer(required_section))
+        for i, m in enumerate(headers):
+            r_id = m.group(1)
+            title = m.group(2).strip()
+            body_start = m.end()
+            body_end = headers[i + 1].start() if i + 1 < len(headers) else len(required_section)
+            body = required_section[body_start:body_end].strip()
+            required.append(RequiredCategory(r_id=r_id, title=title, body=body))
+
+        if not required:
+            import sys
+            print(
+                "[spec_parser] WARNING: no ### Rn. headers found in spec. "
+                "The agent will self-manage R coverage; cover_all pre-enforcement disabled.",
+                file=sys.stderr,
+            )
+
+        return ParsedSpec(
+            required=required,
+            open_exploration=_slice_section(markdown, "Open Exploration"),
+            out_of_scope=_slice_section(markdown, "Out of Scope"),
+        )
+    except Exception as exc:
+        import sys
+        print(f"[spec_parser] WARNING: parse error ({exc}). Proceeding with empty R list.", file=sys.stderr)
+        return ParsedSpec(required=[], open_exploration="", out_of_scope="")

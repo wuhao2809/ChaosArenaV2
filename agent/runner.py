@@ -1,7 +1,11 @@
 """Agent runner: Bedrock-backed Claude tool-use loop.
 
 Reads a system prompt + spec + target URL, runs Claude in a tool-use loop
-until either submit_verdict is called or MAX_TURNS is exceeded.
+until either submit_verdict is called or max_turns is exceeded.
+
+Evaluation mode is always cover_all: the agent must emit submit_verdict_for_R
+for every Required category before submit_verdict is accepted. Turns beyond
+the Required coverage budget are available for Open Exploration.
 """
 
 import hashlib
@@ -14,33 +18,14 @@ from typing import Any
 
 from anthropic import Anthropic, AnthropicBedrock
 
+from config.config import (
+    DEFAULT_MAX_TURNS, MAX_TOKENS, TEMPERATURE, TOP_P_RECORDED, TOP_K_RECORDED,
+    DEFAULT_BEDROCK_MODEL, DEFAULT_DIRECT_MODEL,
+    BEDROCK_PRICING_VERSION, INPUT_COST_PER_MTOK, OUTPUT_COST_PER_MTOK,
+    CACHE_CREATION_PER_MTOK, CACHE_READ_PER_MTOK,
+)
 from tools import EVENT_LOG, SESSIONS, TOOL_SCHEMAS, dispatch_tool
 from spec_parser import parse_spec, ParsedSpec
-
-MAX_TURNS = 25
-MAX_TOKENS = 8192
-
-# Reproducibility: lock sampling. Bedrock for Claude rejects passing
-# both temperature and top_p simultaneously, so we send temperature only
-# and record (but do not send) top_p/top_k for paper provenance.
-TEMPERATURE = 0.0
-TOP_P_RECORDED = 1.0
-TOP_K_RECORDED = 1
-
-# Default Bedrock model ID. Override via MODEL_ID env var if this isn't available
-# in your region or you want a different model.
-DEFAULT_BEDROCK_MODEL = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-DEFAULT_DIRECT_MODEL = "claude-sonnet-4-5"
-
-# AWS Bedrock pricing for Claude Sonnet 4.5 (us-west-2), 2026-Q1.
-# Source: https://aws.amazon.com/bedrock/pricing/
-# Update this version tag whenever pricing changes; record it in run metadata
-# for reproducibility.
-BEDROCK_PRICING_VERSION = "2026-Q1"
-INPUT_COST_PER_MTOK = 3.00         # $/1M tokens for input
-OUTPUT_COST_PER_MTOK = 15.00       # $/1M tokens for output
-CACHE_CREATION_PER_MTOK = 3.75     # $/1M tokens (cache write, ephemeral)
-CACHE_READ_PER_MTOK = 0.30         # $/1M tokens (cache hit)
 
 
 def estimate_cost(
@@ -62,9 +47,7 @@ def get_client():
     """Construct an Anthropic client, defaulting to Bedrock."""
     backend = os.environ.get("ANTHROPIC_BACKEND", "bedrock").lower()
     if backend == "bedrock":
-        return AnthropicBedrock(
-            aws_region=os.environ.get("AWS_REGION", "us-west-2"),
-        )
+        return AnthropicBedrock(aws_region=os.environ.get("AWS_REGION", "us-west-2"))
     return Anthropic()
 
 
@@ -77,7 +60,6 @@ def get_model_id() -> str:
 
 
 def _print_block_text(content_blocks: list) -> None:
-    """Print any text reasoning emitted by the assistant."""
     for block in content_blocks:
         if block.type == "text" and block.text.strip():
             print(f"  Claude: {block.text.strip()}")
@@ -88,7 +70,6 @@ def _truncate(s: str, n: int = 200) -> str:
 
 
 def _git_commit() -> str:
-    """Current git HEAD short hash, or 'unavailable'."""
     try:
         out = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -105,9 +86,9 @@ def _git_commit() -> str:
 def _build_repro_metadata(
     spec_text: str,
     system_prompt_text: str,
-    eval_mode: str,
     target: str,
     model: str,
+    max_turns: int,
 ) -> dict[str, Any]:
     """Collect everything needed to reproduce this run."""
     return {
@@ -117,9 +98,9 @@ def _build_repro_metadata(
         "top_p_recorded": TOP_P_RECORDED,
         "top_k_recorded": TOP_K_RECORDED,
         "note": "Bedrock rejects both temperature+top_p; only temperature is sent. top_p/top_k are recorded for provenance.",
-        "max_turns": MAX_TURNS,
+        "eval_mode": "cover_all",
+        "max_turns": max_turns,
         "max_tokens_per_turn": MAX_TOKENS,
-        "eval_mode": eval_mode,
         "target_url": target,
         "spec_sha256": hashlib.sha256(spec_text.encode("utf-8")).hexdigest(),
         "system_prompt_sha256": hashlib.sha256(system_prompt_text.encode("utf-8")).hexdigest(),
@@ -128,11 +109,6 @@ def _build_repro_metadata(
 
 
 def _serialize_messages(messages: list[dict]) -> list[dict]:
-    """Convert the messages list into a JSON-serializable form.
-
-    The assistant messages contain SDK objects (TextBlock, ToolUseBlock);
-    Pydantic's model_dump() converts them to plain dicts.
-    """
     out = []
     for msg in messages:
         role = msg["role"]
@@ -153,15 +129,50 @@ def _serialize_messages(messages: list[dict]) -> list[dict]:
 
 
 def _dump_messages(messages: list[dict], path: Path, meta: dict, events: list[dict]) -> None:
-    """Write the full conversation history + metadata + events to a JSON file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "meta": meta,
-        "events": events,
-        "messages": _serialize_messages(messages),
-    }
+    payload = {"meta": meta, "events": events, "messages": _serialize_messages(messages)}
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
     print(f"[runner] conversation dumped to {path}")
+
+
+def _write_trace(
+    run_id: str,
+    repro_meta: dict,
+    turns_trace: list[dict],
+    verdict: dict,
+    total_tool_calls: int,
+    total_cost: float,
+) -> None:
+    """Write a structured per-turn trace to trace/<run_id>.json.
+
+    The trace is always written (unlike dump_messages which is opt-in).
+    It is the primary data source for paper §5 experiments.
+    """
+    trace_dir = Path(__file__).resolve().parent / "trace"
+    trace_dir.mkdir(exist_ok=True)
+    path = trace_dir / f"run_{run_id}.json"
+
+    payload = {
+        "run_id": run_id,
+        "started_at_utc": repro_meta.get("started_at_utc"),
+        "finished_at_utc": repro_meta.get("finished_at_utc"),
+        "model": repro_meta.get("model"),
+        "target": repro_meta.get("target_url"),
+        "spec_sha256": repro_meta.get("spec_sha256"),
+        "system_prompt_sha256": repro_meta.get("system_prompt_sha256"),
+        "git_commit": repro_meta.get("git_commit"),
+        "max_turns": repro_meta.get("max_turns"),
+        "eval_mode": "cover_all",
+        "verdict": verdict.get("verdict"),
+        "total_turns": verdict.get("turns"),
+        "total_tool_calls": total_tool_calls,
+        "total_cost_usd": round(total_cost, 6),
+        "r_verdicts": verdict.get("r_verdicts", {}),
+        "r_missing": verdict.get("r_missing", []),
+        "turns": turns_trace,
+    }
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+    print(f"[runner] trace written to {path}")
 
 
 def run_agent(
@@ -169,27 +180,20 @@ def run_agent(
     spec: str,
     target: str,
     dump_messages_to: Path | None = None,
-    eval_mode: str = "fail_fast",
+    max_turns: int = DEFAULT_MAX_TURNS,
+    run_id_override: str | None = None,
 ) -> dict[str, Any]:
-    """Drive the agent through a tool-use loop. Returns the verdict dict.
+    """Drive the agent through a cover_all tool-use loop. Returns the verdict dict.
 
-    Parameters
-    ----------
-    eval_mode : {"fail_fast", "cover_all"}
-        - fail_fast (default): agent may submit overall verdict any time.
-        - cover_all: agent must submit a per-R verdict for every Required
-          category in the spec before submit_verdict is accepted.
+    The agent must emit submit_verdict_for_R for every Required category before
+    submit_verdict is accepted. Turns remaining after full R coverage are
+    available for Open Exploration.
 
-    If dump_messages_to is provided, writes the full conversation history
-    (after the run finishes, success or failure) to that JSON path.
+    If dump_messages_to is provided, the full conversation history is written
+    to that JSON path after the run completes.
     """
-    if eval_mode not in {"fail_fast", "cover_all"}:
-        raise ValueError(f"eval_mode must be fail_fast or cover_all, got {eval_mode!r}")
-
     # Clear module-level state for this run.
     EVENT_LOG.clear()
-    # Close any open Session() objects so we don't leak connections, then
-    # reset the dict — every run starts with no logged-in users.
     for _sess in SESSIONS.values():
         try:
             _sess.close()
@@ -198,86 +202,93 @@ def run_agent(
     SESSIONS.clear()
 
     parsed_spec: ParsedSpec = parse_spec(spec)
-    required_ids = parsed_spec.required_ids   # e.g. ["R1", "R2", ...]
+    required_ids = parsed_spec.required_ids
 
     client = get_client()
     model = get_model_id()
 
     coverage_line = (
-        f"Required test categories (you must address each): "
+        f"Required test categories (you MUST cover each before submitting verdict): "
         f"{', '.join(required_ids) if required_ids else '(none parsed)'}"
     )
-    mode_line = f"Eval mode: {eval_mode}."
-    if eval_mode == "cover_all":
-        mode_line += (
-            " You MUST emit submit_verdict_for_R for every Required R "
-            "before submit_verdict will be accepted."
-        )
-    else:
-        mode_line += (
-            " You MAY submit_verdict at any time once decisive evidence "
-            "(e.g., a critical R FAILED) is in hand. Calling "
-            "submit_verdict_for_R per R is encouraged but not required."
-        )
+    mode_line = (
+        "Eval mode: cover_all. "
+        "You MUST emit submit_verdict_for_R for every Required R before "
+        "submit_verdict will be accepted. "
+        f"After all Rs are covered, use any remaining turns for Open Exploration. "
+        f"Hard stop: call submit_verdict by turn {max_turns}."
+    )
 
-    initial_user = (
+    # Cache breakpoint 3: initial user message (spec + target + run config).
+    # The spec text is static for the entire run — mark it so the API can
+    # cache it and avoid re-processing it on every turn.
+    initial_user_text = (
         f"=== SPEC ===\n{spec}\n\n"
         f"=== TARGET ===\n{target}\n\n"
         f"=== RUN CONFIG ===\n{coverage_line}\n{mode_line}\n\n"
         f"Begin the evaluation."
     )
-    messages: list[dict] = [{"role": "user", "content": initial_user}]
+    messages: list[dict] = [{"role": "user", "content": [
+        {"type": "text", "text": initial_user_text, "cache_control": {"type": "ephemeral"}}
+    ]}]
 
     repro_meta = _build_repro_metadata(
         spec_text=spec,
         system_prompt_text=system_prompt,
-        eval_mode=eval_mode,
         target=target,
         model=model,
+        max_turns=max_turns,
     )
 
-    print(f"[runner] model = {model}")
-    print(f"[runner] target = {target}")
-    print(f"[runner] max_turns = {MAX_TURNS}  temp={TEMPERATURE} (top_p/top_k recorded only)")
-    print(f"[runner] eval_mode = {eval_mode}")
+    print(f"[runner] model      = {model}")
+    print(f"[runner] target     = {target}")
+    print(f"[runner] max_turns  = {max_turns}  temp={TEMPERATURE} (top_p/top_k recorded only)")
+    print(f"[runner] eval_mode  = cover_all")
     print(f"[runner] required Rs = {required_ids}")
-    if eval_mode == "cover_all" and len(required_ids) > 12:
+    if len(required_ids) > 12:
         print(
-            f"[runner] WARNING: {len(required_ids)} Required Rs in cover_all mode — "
+            f"[runner] WARNING: {len(required_ids)} Required Rs — "
             f"agent must verdict all before submit_verdict is accepted. "
-            f"Risk of timeout at MAX_TURNS={MAX_TURNS}. Consider trimming spec to <= 12 Rs."
+            f"Risk of timeout at max_turns={max_turns}. Consider trimming spec to <= 12 Rs."
         )
     print(f"[runner] git_commit = {repro_meta['git_commit']}  spec_sha256 = {repro_meta['spec_sha256'][:12]}...\n")
+
+    run_id = run_id_override if run_id_override else str(int(datetime.now(timezone.utc).timestamp()))
+
+    # Build cached versions of the two static inputs.
+    # Cache breakpoint 1: system prompt (same for every turn).
+    cached_system = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
+    # Cache breakpoint 2: tool schemas (same for every turn).
+    # The cache boundary sits at the last tool — everything up to and including
+    # it is cached after the first creation.
+    cached_tools = list(TOOL_SCHEMAS)
+    if cached_tools:
+        cached_tools[-1] = {**cached_tools[-1], "cache_control": {"type": "ephemeral"}}
 
     verdict: dict[str, Any] | None = None
     tool_call_count = 0
     turn = 0
-
-    # Per-R verdict tracking. r_verdicts[r_id] -> {verdict, confidence, evidence}.
     r_verdicts: dict[str, dict[str, str]] = {}
-
-    # Per-turn and cumulative token usage. We track each turn so the dump
-    # JSON has a per-turn breakdown for paper figures / cost forecasting.
     per_turn_usage: list[dict[str, int]] = []
+    all_turns_trace: list[dict] = []
     total_input = 0
     total_output = 0
     total_cache_creation = 0
     total_cache_read = 0
 
-    for turn in range(1, MAX_TURNS + 1):
+    for turn in range(1, max_turns + 1):
         print()
         print(f"--- Turn {turn} ---")
 
         response = client.messages.create(
             model=model,
-            system=system_prompt,
+            system=cached_system,
             messages=messages,
-            tools=TOOL_SCHEMAS,
+            tools=cached_tools,
             max_tokens=MAX_TOKENS,
             temperature=TEMPERATURE,
         )
 
-        # Accumulate token usage for this turn.
         usage = response.usage
         turn_input = usage.input_tokens
         turn_output = usage.output_tokens
@@ -289,10 +300,8 @@ def run_agent(
         total_cache_creation += turn_cache_creation
         total_cache_read += turn_cache_read
 
-        cum_cost = estimate_cost(
-            total_input, total_output, total_cache_creation, total_cache_read
-        )
-
+        cum_cost = estimate_cost(total_input, total_output, total_cache_creation, total_cache_read)
+        cache_label = f" cache_hit={turn_cache_read:,}" if turn_cache_read else ""
         per_turn_usage.append({
             "turn": turn,
             "input_tokens": turn_input,
@@ -300,16 +309,22 @@ def run_agent(
             "cache_creation_input_tokens": turn_cache_creation,
             "cache_read_input_tokens": turn_cache_read,
         })
-
         print(
-            f"  [tokens] in={turn_input:,} out={turn_output:,} "
+            f"  [tokens] in={turn_input:,} out={turn_output:,}"
+            f"{cache_label} "
             f"cum_in={total_input:,} cum_out={total_output:,} cum_cost=${cum_cost:.4f}"
         )
 
-        # Record assistant's response in conversation history.
         messages.append({"role": "assistant", "content": response.content})
-
         _print_block_text(response.content)
+
+        # Collect Claude's text reasoning for this turn.
+        turn_text = " ".join(
+            block.text.strip()
+            for block in response.content
+            if hasattr(block, "type") and block.type == "text" and block.text.strip()
+        )
+        turn_tool_calls: list[dict[str, Any]] = []
 
         tool_results: list[dict] = []
         verdict_seen = False
@@ -322,8 +337,9 @@ def run_agent(
             args_str = json.dumps(block.input, ensure_ascii=False)
             print(f"  → {block.name}({_truncate(args_str, 300)})")
 
+            trace_call: dict[str, Any] = {"name": block.name, "args": block.input, "result": None}
+
             if block.name == "submit_verdict_for_R":
-                # Record per-R verdict; do NOT end the run.
                 r_id = block.input.get("r_id", "?")
                 r_verdicts[r_id] = {
                     "verdict": block.input.get("verdict", "UNKNOWN"),
@@ -335,28 +351,20 @@ def run_agent(
                     ack = (
                         f"Recorded {r_id} verdict: {r_verdicts[r_id]['verdict']} "
                         f"(confidence={r_verdicts[r_id]['confidence']}). "
-                        f"Remaining Required: {remaining}. "
-                        f"Eval mode: {eval_mode}."
-                    )
-                elif eval_mode == "cover_all":
-                    ack = (
-                        f"Recorded {r_id} verdict: {r_verdicts[r_id]['verdict']} "
-                        f"(confidence={r_verdicts[r_id]['confidence']}). "
-                        f"All Required Rs covered. "
-                        f"NEXT STEP (cover_all): call submit_verdict NOW to end the run. "
-                        f"Do NOT continue probing — exploration is for fail_fast mode."
+                        f"Remaining Required: {remaining}."
                     )
                 else:
+                    turns_left = max_turns - turn
                     ack = (
                         f"Recorded {r_id} verdict: {r_verdicts[r_id]['verdict']} "
                         f"(confidence={r_verdicts[r_id]['confidence']}). "
                         f"All Required Rs covered. "
-                        f"You may now call submit_verdict, or use the remaining "
-                        f"turn budget for brief Open Exploration. "
-                        f"Hard limit: STOP exploration and call submit_verdict by turn {MAX_TURNS - 5} "
-                        f"or after 5 substantive findings — whichever comes first."
+                        f"You have {turns_left} turn(s) left for Open Exploration — "
+                        f"probe for issues the spec did not enumerate, log with record_event. "
+                        f"Call submit_verdict when done."
                     )
                 print(f"  ← {ack}")
+                trace_call["result"] = ack
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
@@ -364,16 +372,15 @@ def run_agent(
                 })
 
             elif block.name == "submit_verdict":
-                # Overall verdict. Validate cover_all preconditions.
                 missing = [r for r in required_ids if r not in r_verdicts]
-                if eval_mode == "cover_all" and missing:
+                if missing:
                     refusal = (
-                        f"REJECTED: cover_all mode requires per-R verdict for every "
-                        f"Required category before submit_verdict. Still missing: "
-                        f"{missing}. Continue testing and emit submit_verdict_for_R "
-                        f"for each missing R, then call submit_verdict again."
+                        f"REJECTED: all Required Rs must have a verdict before submit_verdict "
+                        f"is accepted. Still missing: {missing}. "
+                        f"Continue testing and emit submit_verdict_for_R for each missing R."
                     )
                     print(f"  ← {refusal}")
+                    trace_call["result"] = refusal
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
@@ -387,6 +394,7 @@ def run_agent(
                         "turns": turn,
                     }
                     verdict_seen = True
+                    trace_call["result"] = "Verdict accepted. Run complete."
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
@@ -397,41 +405,45 @@ def run_agent(
                 result = dispatch_tool(block.name, block.input, target)
                 result_str = json.dumps(result, ensure_ascii=False, default=str)
                 print(f"  ← {_truncate(result_str, 300)}")
+                trace_call["result"] = result
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
                     "content": result_str,
                 })
 
+            turn_tool_calls.append(trace_call)
+
+        all_turns_trace.append({
+            "turn": turn,
+            "tokens": {
+                "input": turn_input,
+                "output": turn_output,
+                "cache_creation": turn_cache_creation,
+                "cache_read": turn_cache_read,
+            },
+            "cumulative_cost_usd": round(cum_cost, 6),
+            "text": turn_text,
+            "tool_calls": turn_tool_calls,
+        })
+
         if verdict_seen:
-            # We still append the tool_result so the conversation is well-formed,
-            # then break out.
             messages.append({"role": "user", "content": tool_results})
             break
 
         if tool_results:
-            # If we're past 70% of budget AND all Rs are covered AND in
-            # fail_fast mode, inject a stop-exploration reminder into the
-            # last tool_result's content (Anthropic API requires
-            # tool_results to follow tool_use immediately, so we piggyback).
-            should_remind = (
-                eval_mode == "fail_fast"
-                and required_ids
-                and not [r for r in required_ids if r not in r_verdicts]
-                and turn >= int(MAX_TURNS * 0.7)
-            )
-            if should_remind and tool_results:
+            # When all Rs are covered and we're at 85%+ of the turn budget,
+            # inject a hard stop reminder so the agent doesn't drift indefinitely.
+            all_covered = required_ids and not [r for r in required_ids if r not in r_verdicts]
+            if all_covered and turn >= int(max_turns * 0.85):
                 last = tool_results[-1]
                 last["content"] = (
                     str(last.get("content", ""))
-                    + f"\n\n[runtime reminder] turn {turn}/{MAX_TURNS}; all "
-                    f"Required Rs covered. STOP exploration and call "
-                    f"submit_verdict on the next turn. Do not start new "
-                    f"exploratory probes."
+                    + f"\n\n[runtime reminder] turn {turn}/{max_turns}; all Required Rs covered. "
+                    f"STOP exploration and call submit_verdict on the next turn."
                 )
             messages.append({"role": "user", "content": tool_results})
         else:
-            # No tool calls and no verdict — agent stopped reasoning. Treat as inconclusive.
             print("[runner] agent ended turn without tool calls; treating as inconclusive")
             verdict = {
                 "verdict": "INCONCLUSIVE",
@@ -444,33 +456,25 @@ def run_agent(
     if verdict is None:
         verdict = {
             "verdict": "TIMEOUT",
-            "reasoning": f"Agent did not submit verdict within {MAX_TURNS} turns.",
+            "reasoning": f"Agent did not submit verdict within {max_turns} turns.",
             "tool_calls": tool_call_count,
-            "turns": MAX_TURNS,
+            "turns": max_turns,
         }
 
-    # Attach per-R verdicts and eval mode to the overall verdict.
-    verdict["eval_mode"] = eval_mode
+    verdict["eval_mode"] = "cover_all"
     verdict["required_ids"] = list(required_ids)
     verdict["r_verdicts"] = dict(r_verdicts)
     verdict["r_missing"] = [r for r in required_ids if r not in r_verdicts]
 
-    # Stamp run completion + reproducibility info.
     repro_meta["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
     verdict["repro"] = repro_meta
 
-    # Exploratory findings = events recorded by the agent that are NOT
-    # tied to a Required R. Useful for paper §5 to separate "in-spec" vs
-    # "discovered in Open Exploration" violations.
     verdict["exploratory_findings"] = [
         e for e in EVENT_LOG
         if e.get("event_type") in ("VIOLATION", "OBSERVATION", "WARNING")
     ]
 
-    # Attach token / cost stats to the verdict for caller visibility.
-    final_cost = estimate_cost(
-        total_input, total_output, total_cache_creation, total_cache_read
-    )
+    final_cost = estimate_cost(total_input, total_output, total_cache_creation, total_cache_read)
     verdict["usage"] = {
         "input_tokens": total_input,
         "output_tokens": total_output,
@@ -480,8 +484,6 @@ def run_agent(
         "pricing_version": BEDROCK_PRICING_VERSION,
         "per_turn": per_turn_usage,
     }
-
-    # Attach recorded events to the verdict for caller visibility.
     verdict["events"] = list(EVENT_LOG)
 
     if dump_messages_to is not None:
@@ -491,7 +493,7 @@ def run_agent(
             meta={
                 "model": model,
                 "target": target,
-                "eval_mode": eval_mode,
+                "eval_mode": "cover_all",
                 "verdict": verdict["verdict"],
                 "turns": verdict["turns"],
                 "tool_calls": verdict["tool_calls"],
@@ -505,5 +507,14 @@ def run_agent(
             },
             events=list(EVENT_LOG),
         )
+
+    _write_trace(
+        run_id=run_id,
+        repro_meta=repro_meta,
+        turns_trace=all_turns_trace,
+        verdict=verdict,
+        total_tool_calls=tool_call_count,
+        total_cost=final_cost,
+    )
 
     return verdict

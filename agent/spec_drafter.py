@@ -23,12 +23,13 @@ from pathlib import Path
 
 from anthropic import Anthropic, AnthropicBedrock
 
-
-DEFAULT_BEDROCK_MODEL = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
-DEFAULT_DIRECT_MODEL = "claude-sonnet-4-5"
-
-DRAFTER_TEMPERATURE = 0.0
-DRAFTER_MAX_TOKENS = 8192
+from config.config import (
+    DEFAULT_MAX_TURNS, DRAFTER_TEMPERATURE, DRAFTER_MAX_TOKENS,
+    DEFAULT_BEDROCK_MODEL, DEFAULT_DIRECT_MODEL,
+    BEDROCK_PRICING_VERSION, INPUT_COST_PER_MTOK, OUTPUT_COST_PER_MTOK,
+    CACHE_CREATION_PER_MTOK, CACHE_READ_PER_MTOK,
+    CATEGORY_TURN_COST, PRIORITY_ORDER,
+)
 
 
 def _get_client():
@@ -47,16 +48,47 @@ def _get_model_id() -> str:
 
 
 def _extract_json(text: str) -> dict:
-    """Strip any prose / fences and parse the JSON object the LLM emitted."""
-    # Strip ```json fences if present
-    fence_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
-    if fence_match:
-        return json.loads(fence_match.group(1))
-    # Otherwise find the first balanced JSON object
-    obj_match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not obj_match:
-        raise ValueError("No JSON object found in drafter output.")
-    return json.loads(obj_match.group(0))
+    """Robustly extract the JSON object from drafter output.
+
+    Handles:
+    - Sonnet 4.6 extended thinking inside <thinking>...</thinking> tags
+    - ```json fenced code blocks (takes the LAST valid one)
+    - Raw JSON objects embedded in prose
+    """
+    # Strip extended thinking blocks first — Sonnet 4.6 outputs these before JSON.
+    clean = re.sub(r"<thinking>.*?</thinking>", "", text, flags=re.DOTALL).strip()
+
+    # Try all fenced blocks, prefer the last valid JSON (model may emit thinking
+    # with partial JSON before the real output).
+    fences = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", clean, re.DOTALL)
+    for candidate in reversed(fences):
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+
+    # No valid fence — walk backwards to find the last complete balanced {} object.
+    depth = 0
+    end_pos = -1
+    for i in range(len(clean) - 1, -1, -1):
+        if clean[i] == '}':
+            if end_pos == -1:
+                end_pos = i
+            depth += 1
+        elif clean[i] == '{':
+            depth -= 1
+            if depth == 0 and end_pos != -1:
+                try:
+                    return json.loads(clean[i:end_pos + 1])
+                except json.JSONDecodeError:
+                    # Reset and keep searching further back.
+                    end_pos = -1
+                    depth = 0
+
+    raise ValueError(
+        f"No valid JSON object found in drafter output. "
+        f"Preview: {clean[:300]!r}"
+    )
 
 
 def _validate_spec_json(payload: dict) -> dict:
@@ -83,9 +115,14 @@ def _validate_spec_json(payload: dict) -> dict:
             if not v:
                 raise ValueError(f"Category {cat} is an empty list (forbidden)")
             for i, tc in enumerate(v):
-                for key in ("name", "given", "when", "then"):
+                for key in ("name", "given", "when", "then", "priority"):
                     if key not in tc:
                         raise ValueError(f"{cat}[{i}] missing field '{key}'")
+                if tc["priority"] not in ("HIGH", "MEDIUM", "LOW"):
+                    raise ValueError(
+                        f"{cat}[{i}] priority must be HIGH/MEDIUM/LOW, "
+                        f"got {tc['priority']!r}"
+                    )
         else:
             raise ValueError(f"Category {cat} must be list or n_a dict, got {type(v).__name__}")
 
@@ -140,6 +177,7 @@ def _render_markdown(spec: dict) -> str:
                 lines.append(f"- **Given**: {tc['given']}")
                 lines.append(f"- **When**: {tc['when']}")
                 lines.append(f"- **Then**: {tc['then']}")
+                lines.append(f"- **Priority**: {tc.get('priority', 'MEDIUM')}")
                 lines.append("")
                 r_counter += 1
 
@@ -166,13 +204,139 @@ def _render_markdown(spec: dict) -> str:
     return "\n".join(lines)
 
 
+def _estimate_run_turns(spec: dict) -> int:
+    """Rough total turn estimate for a cover_all run on this spec."""
+    total = 0
+    for cat, cost in CATEGORY_TURN_COST.items():
+        v = spec.get(cat, {})
+        if isinstance(v, list):
+            total += len(v) * cost
+    return total
+
+
+def _interactive_trim(spec: dict) -> dict:
+    """Show Rs sorted by priority + estimated turn cost; let the user pick a cutoff.
+
+    Returns a (possibly filtered) copy of spec. Categories that lose all their
+    test cases are replaced with an n_a_justification dict so the markdown
+    renderer and downstream spec_parser still see a valid structure.
+    Skipped entirely when stdin is not a TTY (piped / CI mode).
+    """
+    import sys
+
+    if not sys.stdin.isatty():
+        return spec
+
+    # Collect every TestCase across all four categories with its origin index.
+    rows: list[tuple[str, int, dict, int]] = []  # (category, orig_idx, tc, est_turns)
+    for cat in ("race_conditions", "async_invariants", "auth_boundaries", "edge_cases"):
+        v = spec.get(cat, {})
+        if isinstance(v, list):
+            cost = CATEGORY_TURN_COST[cat]
+            for i, tc in enumerate(v):
+                rows.append((cat, i, tc, cost))
+
+    if not rows:
+        return spec
+
+    # Sort: HIGH → MEDIUM → LOW, then stable by original order within priority.
+    rows.sort(key=lambda r: PRIORITY_ORDER.get(r[2].get("priority", "LOW"), 2))
+
+    # Print the table.
+    print("\n[spec_drafter] Generated test cases (sorted by priority):\n")
+    cumulative = 0
+    for seq, (cat, _, tc, cost) in enumerate(rows, start=1):
+        priority = tc.get("priority", "?")
+        cumulative += cost
+        print(
+            f"  R{seq:2d} [{priority:<6}] {tc['name'][:48]:<48}"
+            f"  ~{cost} turn{'s' if cost > 1 else ' '}   cumulative: {cumulative}"
+        )
+
+    total_turns = sum(r[3] for r in rows)
+    high_rs    = [(cat, idx) for cat, idx, tc, _ in rows if tc.get("priority") == "HIGH"]
+    med_rs     = [(cat, idx) for cat, idx, tc, _ in rows if tc.get("priority") in ("HIGH", "MEDIUM")]
+    high_turns = sum(CATEGORY_TURN_COST[cat] for cat, _ in high_rs)
+    med_turns  = sum(CATEGORY_TURN_COST[cat] for cat, _ in med_rs)
+
+    # Suggest a cutoff based on the turn budget.
+    if total_turns <= DEFAULT_MAX_TURNS * 0.8:
+        suggestion = "A"
+    elif med_turns <= DEFAULT_MAX_TURNS * 0.8:
+        suggestion = "M"
+    else:
+        suggestion = "H"
+
+    print(f"\n  Total: {len(rows)} Rs, ~{total_turns} turns  (MAX_TURNS={DEFAULT_MAX_TURNS})\n")
+    print(f"  [H] HIGH only          {len(high_rs):2d} Rs, ~{high_turns} turns")
+    print(f"  [M] MEDIUM and above   {len(med_rs):2d} Rs, ~{med_turns} turns")
+    print(f"  [A] All                {len(rows):2d} Rs, ~{total_turns} turns")
+    print(f"  [C] Custom (space-separated R numbers, e.g. 1 2 4)\n")
+    print(f"  Suggested: [{suggestion}]")
+
+    keep_keys: set[tuple[str, int]] = set()
+    while True:
+        try:
+            choice = input("  Keep [H/M/A/C]? ").strip().upper()
+        except EOFError:
+            choice = suggestion
+
+        if choice == "H":
+            keep_keys = set(high_rs)
+            break
+        elif choice == "M":
+            keep_keys = set(med_rs)
+            break
+        elif choice == "A":
+            keep_keys = {(cat, idx) for cat, idx, _, _ in rows}
+            break
+        elif choice == "C":
+            try:
+                raw = input("  R numbers to keep: ").strip()
+                chosen_seqs = {int(x) for x in raw.split()}
+                keep_keys = {
+                    (cat, idx)
+                    for seq, (cat, idx, _, _) in enumerate(rows, start=1)
+                    if seq in chosen_seqs
+                }
+                break
+            except (ValueError, EOFError):
+                print("  Invalid — try again.")
+        else:
+            print("  Please enter H, M, A, or C.")
+
+    # Build the filtered spec, preserving all non-list keys unchanged.
+    filtered = dict(spec)
+    for cat in ("race_conditions", "async_invariants", "auth_boundaries", "edge_cases"):
+        v = spec[cat]
+        if not isinstance(v, list):
+            continue  # already N/A — leave untouched
+        kept = [tc for i, tc in enumerate(v) if (cat, i) in keep_keys]
+        if kept:
+            filtered[cat] = kept
+        else:
+            filtered[cat] = {
+                "n_a_justification": "All cases in this category were removed during interactive trim."
+            }
+
+    kept_total = sum(
+        len(filtered[c]) for c in ("race_conditions", "async_invariants", "auth_boundaries", "edge_cases")
+        if isinstance(filtered[c], list)
+    )
+    kept_turns = _estimate_run_turns(filtered)
+    print(f"\n  [spec_drafter] Keeping {kept_total} Rs, ~{kept_turns} estimated turns.\n")
+    return filtered
+
+
 def draft_spec(
     nl_description: str,
     system_prompt_path: Path | None = None,
-) -> tuple[str, dict]:
+    interactive: bool = True,
+) -> tuple[str, dict, dict]:
     """Run one Bedrock call to draft a spec from natural language.
 
-    Returns (markdown_text, raw_json_dict). Raises on validation failure.
+    Returns (markdown_text, raw_json_dict, drafter_usage_dict).
+    Raises on validation failure.
     """
     here = Path(__file__).resolve().parent
     sp_path = system_prompt_path or (here / "system_prompt_drafter.txt")
@@ -190,6 +354,9 @@ def draft_spec(
         f"prompt. Think first inside <thinking> tags, then emit JSON only."
     )
 
+    print(f"[drafter] model = {model}")
+    print(f"[drafter] sending to model… (may take 30–60s)", flush=True)
+
     response = client.messages.create(
         model=model,
         system=system_prompt,
@@ -198,11 +365,46 @@ def draft_spec(
         temperature=DRAFTER_TEMPERATURE,
     )
 
+    print(
+        f"[drafter] response received — "
+        f"in={response.usage.input_tokens:,} out={response.usage.output_tokens:,} tokens. "
+        f"Extracting JSON…",
+        flush=True,
+    )
     raw_text = "".join(b.text for b in response.content if b.type == "text")
     spec_json = _extract_json(raw_text)
+
+    print("[drafter] Validating spec…", flush=True)
     spec_json = _validate_spec_json(spec_json)
+
+    n_cases = sum(
+        len(spec_json[c]) for c in ("race_conditions", "async_invariants", "auth_boundaries", "edge_cases")
+        if isinstance(spec_json.get(c), list)
+    )
+    print(f"[drafter] {n_cases} test cases generated. Estimating turn cost…", flush=True)
+
+    if interactive:
+        spec_json = _interactive_trim(spec_json)
     markdown = _render_markdown(spec_json)
-    return markdown, spec_json
+
+    u = response.usage
+    cache_create = getattr(u, "cache_creation_input_tokens", 0) or 0
+    cache_read = getattr(u, "cache_read_input_tokens", 0) or 0
+    drafter_usage = {
+        "input_tokens": u.input_tokens,
+        "output_tokens": u.output_tokens,
+        "cache_creation_input_tokens": cache_create,
+        "cache_read_input_tokens": cache_read,
+        "cost_usd": round(
+            u.input_tokens * INPUT_COST_PER_MTOK / 1_000_000
+            + u.output_tokens * OUTPUT_COST_PER_MTOK / 1_000_000
+            + cache_create * CACHE_CREATION_PER_MTOK / 1_000_000
+            + cache_read * CACHE_READ_PER_MTOK / 1_000_000,
+            6,
+        ),
+        "pricing_version": BEDROCK_PRICING_VERSION,
+    }
+    return markdown, spec_json, drafter_usage
 
 
 if __name__ == "__main__":
@@ -224,6 +426,11 @@ if __name__ == "__main__":
         default=None,
         help="Optional path to write the raw validated JSON for inspection",
     )
+    parser.add_argument(
+        "--no-interactive",
+        action="store_true",
+        help="Skip the interactive trim gate (useful for scripting / CI)",
+    )
     args = parser.parse_args()
 
     if args.input == "-":
@@ -231,7 +438,7 @@ if __name__ == "__main__":
     else:
         nl = Path(args.input).read_text()
 
-    md, raw = draft_spec(nl)
+    md, raw, usage = draft_spec(nl, interactive=not args.no_interactive)
 
     if args.output:
         Path(args.output).write_text(md)
@@ -242,3 +449,10 @@ if __name__ == "__main__":
     if args.also_write_json:
         Path(args.also_write_json).write_text(json.dumps(raw, indent=2, ensure_ascii=False))
         print(f"[drafter] raw JSON written to {args.also_write_json}", file=sys.stderr)
+
+    print(
+        f"[drafter] tokens_in={usage['input_tokens']:,}  "
+        f"tokens_out={usage['output_tokens']:,}  "
+        f"cost=${usage['cost_usd']:.4f}  ({usage['pricing_version']})",
+        file=sys.stderr,
+    )
