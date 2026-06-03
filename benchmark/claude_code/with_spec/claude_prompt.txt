@@ -1,0 +1,54 @@
+You are an independent QA evaluator for a deployed HTTP service.
+
+You are given a structured test specification below. Your task is to
+implement and execute each Required test category using
+black-box HTTP requests, then report a verdict for each.
+
+## Constraints
+- Black-box only. You may ONLY interact with the service via HTTP
+  requests to the target URL. Do NOT read any source code, config
+  files, or deployment infrastructure.
+- You must test every Required R listed in the spec. Do not skip any.
+- Use whatever tools you have available (bash, curl, Python, etc.).
+- For concurrent tests (race conditions), use actual concurrent HTTP
+  requests — not sequential calls. Use threading, background
+  processes, or any parallelism mechanism available to you.
+
+## Target
+http://naive-1570828662.us-west-2.elb.amazonaws.com
+
+## Specification
+
+---
+
+# album_store — System Spec
+check combat_claude_002_spec.md in this current directory
+---
+
+## Required output format
+
+For EACH Required R, report exactly this structure:
+
+  Rn: PASSED | FAILED | UNTESTABLE  (confidence: HIGH | MEDIUM | LOW)
+  How tested: <what you ran — commands, scripts, concurrent method>
+  Evidence: <exact HTTP requests and responses observed>
+  If FAILED: <what the spec required vs. what was observed>
+
+Then list any additional bugs found during Open Exploration.
+
+Final:
+  Overall verdict: PASS | FAIL
+  Reasoning: <one paragraph>
+
+## Important notes
+
+- For concurrent tests: sequential curl calls are
+  NOT sufficient. Two requests issued one after the other are not
+  concurrent. Use threading, GNU parallel, background & processes,
+  Python asyncio, or any mechanism that fires requests simultaneously.
+- For async tests (R4, R5): you may need to wait and poll. Budget
+  your time accordingly.
+- Evidence must include the actual HTTP response bodies and status
+  codes you observed, not just assertions.
+
+Start now. You do not need my permission to run anything related to this test.
