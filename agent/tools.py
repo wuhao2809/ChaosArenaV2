@@ -73,9 +73,11 @@ TOOL_SCHEMAS: list[dict] = [
     {
         "name": "http_call",
         "description": (
-            "Make a single HTTP request to the target service. "
-            "Returns status code, response body, and latency in milliseconds. "
-            "Use this to probe individual endpoints to verify their behavior."
+            "Make a single HTTP request. By default targets the service under "
+            "test via `path`. To fetch an external URL (e.g. a pre-signed S3 "
+            "URL returned in a response body), pass the full URL in the `url` "
+            "field instead of `path`. Returns status code, response body, and "
+            "latency in milliseconds."
         ),
         "input_schema": {
             "type": "object",
@@ -86,10 +88,19 @@ TOOL_SCHEMAS: list[dict] = [
                     "description": "HTTP method.",
                 },
                 "path": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "description": (
                         "URL path relative to the target base URL, starting with /. "
-                        "Example: '/health' or '/tasks/abc123'."
+                        "Example: '/health' or '/albums/abc123'. "
+                        "Omit when using `url` for an external request."
+                    ),
+                },
+                "url": {
+                    "type": ["string", "null"],
+                    "description": (
+                        "Full absolute URL for requests outside the target service. "
+                        "Use this to verify external resources like pre-signed S3 URLs "
+                        "returned in response bodies. When set, `path` is ignored."
                     ),
                 },
                 "body": {
@@ -141,7 +152,7 @@ TOOL_SCHEMAS: list[dict] = [
                     "required": ["field"],
                 },
             },
-            "required": ["method", "path"],
+            "required": ["method"],
         },
     },
     {
@@ -553,16 +564,21 @@ def _build_multipart(multipart: dict) -> tuple[dict, int]:
 
 def http_call(
     method: str,
-    path: str,
+    path: str | None,
     target: str,
     body: dict | None = None,
     headers: dict | None = None,
     multipart: dict | None = None,
+    url: str | None = None,
 ) -> dict[str, Any]:
-    """Execute a single HTTP request against the target service."""
-    if not path.startswith("/"):
-        path = "/" + path
-    url = target.rstrip("/") + path
+    """Execute a single HTTP request. Uses `url` if provided, else builds from target + path."""
+    if url:
+        final_url = url
+    else:
+        p = path or "/"
+        if not p.startswith("/"):
+            p = "/" + p
+        final_url = target.rstrip("/") + p
 
     # Multipart uploads need more time (especially oversize tests).
     timeout = 30 if multipart else 10
@@ -573,7 +589,7 @@ def http_call(
             files, size_bytes = _build_multipart(multipart)
             response = requests.request(
                 method=method.upper(),
-                url=url,
+                url=final_url,
                 files=files,
                 headers=headers or {},
                 timeout=timeout,
@@ -581,7 +597,7 @@ def http_call(
         else:
             response = requests.request(
                 method=method.upper(),
-                url=url,
+                url=final_url,
                 json=body,
                 headers=headers or {},
                 timeout=timeout,
@@ -956,11 +972,12 @@ def dispatch_tool(name: str, input_args: dict, target: str) -> dict[str, Any]:
     if name == "http_call":
         return http_call(
             method=input_args["method"],
-            path=input_args["path"],
+            path=input_args.get("path"),
             target=target,
             body=input_args.get("body"),
             headers=input_args.get("headers"),
             multipart=input_args.get("multipart"),
+            url=input_args.get("url"),
         )
     if name == "http_call_with_session":
         return http_call_with_session(
