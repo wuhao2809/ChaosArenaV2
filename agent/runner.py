@@ -22,8 +22,9 @@ from config.config import (
     DEFAULT_MAX_TURNS, MAX_TOKENS, TEMPERATURE, TOP_P_RECORDED, TOP_K_RECORDED,
     DEFAULT_BEDROCK_MODEL, DEFAULT_DIRECT_MODEL,
     BEDROCK_PRICING_VERSION, INPUT_COST_PER_MTOK, OUTPUT_COST_PER_MTOK,
-    CACHE_CREATION_PER_MTOK, CACHE_READ_PER_MTOK,
+    CACHE_CREATION_PER_MTOK, CACHE_READ_PER_MTOK, ENABLE_R_CONTEXT_TRIMMING,
 )
+from conversation_memory import Memory, RequiredCategorySpec
 from tools import EVENT_LOG, SESSIONS, TOOL_SCHEMAS, dispatch_tool
 from spec_parser import parse_spec, ParsedSpec
 
@@ -108,29 +109,9 @@ def _build_repro_metadata(
     }
 
 
-def _serialize_messages(messages: list[dict]) -> list[dict]:
-    out = []
-    for msg in messages:
-        role = msg["role"]
-        content = msg["content"]
-        if isinstance(content, str):
-            out.append({"role": role, "content": content})
-            continue
-        serialized_blocks = []
-        for block in content:
-            if hasattr(block, "model_dump"):
-                serialized_blocks.append(block.model_dump())
-            elif isinstance(block, dict):
-                serialized_blocks.append(block)
-            else:
-                serialized_blocks.append({"raw": str(block)})
-        out.append({"role": role, "content": serialized_blocks})
-    return out
-
-
-def _dump_messages(messages: list[dict], path: Path, meta: dict, events: list[dict]) -> None:
+def _dump_messages(messages: list[dict], path: Path, meta: dict, events: list[dict], memory_state: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"meta": meta, "events": events, "messages": _serialize_messages(messages)}
+    payload = {"meta": meta, "events": events, "memory_state": memory_state, "messages": messages}
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False))
     print(f"[runner] conversation dumped to {path}")
 
@@ -203,6 +184,10 @@ def run_agent(
 
     parsed_spec: ParsedSpec = parse_spec(spec)
     required_ids = parsed_spec.required_ids
+    required_specs = [
+        RequiredCategorySpec(r_id=r.r_id, title=r.title, body=r.body)
+        for r in parsed_spec.required
+    ]
 
     client = get_client()
     model = get_model_id()
@@ -228,9 +213,14 @@ def run_agent(
         f"=== RUN CONFIG ===\n{coverage_line}\n{mode_line}\n\n"
         f"Begin the evaluation."
     )
-    messages: list[dict] = [{"role": "user", "content": [
+    initial_message = {"role": "user", "content": [
         {"type": "text", "text": initial_user_text, "cache_control": {"type": "ephemeral"}}
-    ]}]
+    ]}
+    memory = Memory(
+        initial_message=initial_message,
+        required_specs=required_specs,
+        enable_r_context_trimming=ENABLE_R_CONTEXT_TRIMMING,
+    )
 
     repro_meta = _build_repro_metadata(
         spec_text=spec,
@@ -283,7 +273,7 @@ def run_agent(
         response = client.messages.create(
             model=model,
             system=cached_system,
-            messages=messages,
+            messages=memory.get_active_messages(),
             tools=cached_tools,
             max_tokens=MAX_TOKENS,
             temperature=TEMPERATURE,
@@ -315,7 +305,7 @@ def run_agent(
             f"cum_in={total_input:,} cum_out={total_output:,} cum_cost=${cum_cost:.4f}"
         )
 
-        messages.append({"role": "assistant", "content": response.content})
+        memory.record_assistant_response(response.content, turn=turn)
         _print_block_text(response.content)
 
         # Collect Claude's text reasoning for this turn.
@@ -327,6 +317,7 @@ def run_agent(
         turn_tool_calls: list[dict[str, Any]] = []
 
         tool_results: list[dict] = []
+        completed_r_ids: list[str] = []
         verdict_seen = False
 
         for block in response.content:
@@ -365,6 +356,24 @@ def run_agent(
                     )
                 print(f"  ← {ack}")
                 trace_call["result"] = ack
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": ack,
+                })
+                completed_r_ids.append(r_id)
+
+            elif block.name == "remember_fact":
+                fact = memory.remember_fact(
+                    key=block.input.get("key", ""),
+                    value=block.input.get("value"),
+                    note=block.input.get("note", "") or "",
+                    source_r_id=block.input.get("source_r_id"),
+                    turn=turn,
+                )
+                ack = f"Remembered fact {fact['key']}."
+                print(f"  ← {ack}")
+                trace_call["result"] = fact
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
@@ -414,7 +423,7 @@ def run_agent(
 
             turn_tool_calls.append(trace_call)
 
-        all_turns_trace.append({
+        turn_trace = {
             "turn": turn,
             "tokens": {
                 "input": turn_input,
@@ -425,10 +434,15 @@ def run_agent(
             "cumulative_cost_usd": round(cum_cost, 6),
             "text": turn_text,
             "tool_calls": turn_tool_calls,
-        })
+            "memory": memory.metrics(),
+        }
 
         if verdict_seen:
-            messages.append({"role": "user", "content": tool_results})
+            memory.record_tool_results(tool_results, turn=turn, turn_tool_calls=turn_tool_calls)
+            if completed_r_ids:
+                memory.complete_rs([(r_id, r_verdicts[r_id]) for r_id in completed_r_ids])
+            turn_trace["memory"] = memory.metrics()
+            all_turns_trace.append(turn_trace)
             break
 
         if tool_results:
@@ -442,8 +456,13 @@ def run_agent(
                     + f"\n\n[runtime reminder] turn {turn}/{max_turns}; all Required Rs covered. "
                     f"STOP exploration and call submit_verdict on the next turn."
                 )
-            messages.append({"role": "user", "content": tool_results})
+            memory.record_tool_results(tool_results, turn=turn, turn_tool_calls=turn_tool_calls)
+            if completed_r_ids:
+                memory.complete_rs([(r_id, r_verdicts[r_id]) for r_id in completed_r_ids])
+            turn_trace["memory"] = memory.metrics()
+            all_turns_trace.append(turn_trace)
         else:
+            all_turns_trace.append(turn_trace)
             print("[runner] agent ended turn without tool calls; treating as inconclusive")
             verdict = {
                 "verdict": "INCONCLUSIVE",
@@ -488,7 +507,7 @@ def run_agent(
 
     if dump_messages_to is not None:
         _dump_messages(
-            messages,
+            memory.get_full_messages(),
             dump_messages_to,
             meta={
                 "model": model,
@@ -506,6 +525,7 @@ def run_agent(
                 "repro": repro_meta,
             },
             events=list(EVENT_LOG),
+            memory_state=memory.export_state(),
         )
 
     _write_trace(

@@ -1,6 +1,6 @@
 """Tool implementations for the ChaosArena MVP agent.
 
-Nine tools are exposed to Claude:
+Ten tools are exposed to Claude:
 
   - http_call(method, path, body, headers): single stateless HTTP request
   - http_call_with_session(session_id, method, path, body, headers): single
@@ -25,6 +25,7 @@ Nine tools are exposed to Claude:
       breaks. Use for invariants like "after DELETE, GET returns 404 for at
       least 15 seconds".
   - record_event(event_type, detail): write a forensic event to the audit log
+  - remember_fact(key, value, note): pin a reusable fact into compact memory
   - submit_verdict_for_R(r_id, verdict, confidence, evidence): per-R structured
       verdict. Agent must call this for each Required category in cover_all
       mode before submit_verdict is accepted.
@@ -473,6 +474,38 @@ TOOL_SCHEMAS: list[dict] = [
                 },
             },
             "required": ["event_type", "detail"],
+        },
+    },
+    {
+        "name": "remember_fact",
+        "description": (
+            "Pin a small reusable fact into compact run memory. Use this when "
+            "you create an ID, URL, session name, or other value that future "
+            "Rs may need after earlier raw tool history is trimmed away. Keep "
+            "facts short and generic."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "Short stable fact name, e.g. 'album_a_id', 'alice_session', 'photo_url'.",
+                },
+                "value": {
+                    "type": ["string", "number", "integer", "boolean", "object", "array", "null"],
+                    "description": "The value to preserve. Prefer short strings or small JSON values.",
+                },
+                "note": {
+                    "type": ["string", "null"],
+                    "description": "Optional short note about why this fact matters later.",
+                },
+                "source_r_id": {
+                    "type": ["string", "null"],
+                    "pattern": r"^R\d+$",
+                    "description": "Optional R id associated with this fact, if known.",
+                },
+            },
+            "required": ["key", "value"],
         },
     },
     {
@@ -968,7 +1001,7 @@ def record_event(event_type: str, detail: str) -> dict[str, Any]:
 
 
 def dispatch_tool(name: str, input_args: dict, target: str) -> dict[str, Any]:
-    """Route a tool call to its implementation. submit_verdict is handled by runner."""
+    """Route a tool call to its implementation. Memory/verdict tools are handled by runner."""
     if name == "http_call":
         return http_call(
             method=input_args["method"],

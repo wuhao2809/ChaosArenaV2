@@ -3,8 +3,9 @@
 All output files are named from a single --run-id:
 
   <run-id>_spec.md     → specs/          (only when --nl-input drafts a spec)
-  <run-id>_trace.json  → trace/          (always written)
+  run_<run-id>.json    → trace/          (always written)
   <run-id>_memory.json → memory/         (always written)
+  <run-id>_verdict.md  → Verdict/        (always written)
 
 Usage examples:
 
@@ -50,9 +51,95 @@ def _output_paths(run_id: str, script_dir: Path) -> dict[str, Path]:
     """Derive all output paths from a single run-id."""
     return {
         "spec":   script_dir.parent / "specs"  / f"{run_id}_spec.md",
-        "trace":  script_dir        / "trace"  / f"{run_id}_trace.json",
+        "trace":  script_dir        / "trace"  / f"run_{run_id}.json",
         "memory": script_dir        / "memory" / f"{run_id}_memory.json",
+        "verdict": script_dir       / "Verdict" / f"{run_id}_verdict.md",
     }
+
+
+def _write_verdict_report(result: dict, drafter_usage: dict | None, path: Path) -> None:
+    """Write the final verdict as a human-readable markdown report."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    lines = [
+        f"# ChaosArena Verdict Report",
+        "",
+        f"**Verdict**: {result.get('verdict', 'UNKNOWN')}",
+        f"**Turns**: {result.get('turns', '?')}",
+        f"**Tool calls**: {result.get('tool_calls', '?')}",
+        f"**Eval mode**: {result.get('eval_mode', '?')}",
+        "",
+        "## Reasoning",
+        "",
+        result.get("reasoning", "").strip() or "(no reasoning provided)",
+        "",
+        "## Required Categories",
+        "",
+    ]
+
+    r_verdicts = result.get("r_verdicts") or {}
+    required_ids = result.get("required_ids") or []
+    if required_ids:
+        for r_id in required_ids:
+            r = r_verdicts.get(r_id)
+            if r:
+                lines.extend([
+                    f"### {r_id}: {r.get('verdict', 'UNKNOWN')} ({r.get('confidence', 'UNKNOWN')})",
+                    "",
+                    r.get("evidence", "").strip() or "(no evidence provided)",
+                    "",
+                ])
+            else:
+                lines.extend([f"### {r_id}: Missing verdict", ""])
+    else:
+        lines.extend(["No Required categories were parsed.", ""])
+
+    findings = result.get("exploratory_findings") or []
+    lines.extend(["## Exploratory Findings", ""])
+    if findings:
+        for i, finding in enumerate(findings, start=1):
+            lines.append(
+                f"{i}. **{finding.get('event_type', 'NOTE')}**: {finding.get('detail', '')}"
+            )
+        lines.append("")
+    else:
+        lines.extend(["No exploratory findings recorded.", ""])
+
+    usage = result.get("usage") or {}
+    if usage:
+        drafter_cost = drafter_usage["cost_usd"] if drafter_usage else 0.0
+        total_cost = round(usage.get("cost_usd", 0.0) + drafter_cost, 6)
+        lines.extend([
+            "## Usage",
+            "",
+            f"- Agent input tokens: {usage.get('input_tokens', 0):,}",
+            f"- Agent output tokens: {usage.get('output_tokens', 0):,}",
+            f"- Agent cost: ${usage.get('cost_usd', 0.0):.6f}",
+        ])
+        if drafter_usage:
+            lines.append(f"- Drafter cost: ${drafter_cost:.6f}")
+        lines.extend([
+            f"- Total cost: ${total_cost:.6f}",
+            f"- Pricing version: {usage.get('pricing_version', '?')}",
+            "",
+        ])
+
+    repro = result.get("repro") or {}
+    if repro:
+        lines.extend([
+            "## Reproducibility",
+            "",
+            f"- Model: {repro.get('model', '?')}",
+            f"- Target: {repro.get('target_url', '?')}",
+            f"- Git commit: {repro.get('git_commit', '?')}",
+            f"- Spec SHA-256: {repro.get('spec_sha256', '?')}",
+            f"- System prompt SHA-256: {repro.get('system_prompt_sha256', '?')}",
+            f"- Started at UTC: {repro.get('started_at_utc', '?')}",
+            f"- Finished at UTC: {repro.get('finished_at_utc', '?')}",
+            "",
+        ])
+
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def _print_verdict(result: dict, drafter_usage: dict | None, paths: dict[str, Path]) -> None:
@@ -122,6 +209,7 @@ def _print_verdict(result: dict, drafter_usage: dict | None, paths: dict[str, Pa
     print()
     print(f"[outputs] trace  → {paths['trace']}")
     print(f"[outputs] memory → {paths['memory']}")
+    print(f"[outputs] verdict → {paths['verdict']}")
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +223,9 @@ def main() -> int:
         epilog=(
             "All outputs are named from --run-id:\n"
             "  specs/<run-id>_spec.md     (when --nl-input is used)\n"
-            "  trace/<run-id>_trace.json  (always)\n"
+            "  trace/run_<run-id>.json    (always)\n"
             "  memory/<run-id>_memory.json (always)\n"
+            "  Verdict/<run-id>_verdict.md (always)\n"
         ),
     )
 
@@ -286,6 +375,7 @@ def main() -> int:
         run_id_override=run_id,
     )
 
+    _write_verdict_report(result, drafter_usage, paths["verdict"])
     _print_verdict(result, drafter_usage, paths)
 
     return 0 if result["verdict"] == "PASS" else 1

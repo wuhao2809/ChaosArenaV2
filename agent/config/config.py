@@ -10,6 +10,7 @@ MAX_TOKENS = 8192               # max output tokens per Bedrock/API call
 TEMPERATURE = 0.0               # lock sampling for reproducibility
 TOP_P_RECORDED = 1.0            # not sent to Bedrock; recorded for provenance
 TOP_K_RECORDED = 1              # not sent to Bedrock; recorded for provenance
+ENABLE_R_CONTEXT_TRIMMING = True  # archive completed R history outside the active prompt
 
 # ── Model IDs ──────────────────────────────────────────────────────────────
 # Bedrock requires a cross-region inference profile, not the base model ID.

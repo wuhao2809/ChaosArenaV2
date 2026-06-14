@@ -30,6 +30,9 @@ If you needed to see results before deciding the verdict (e.g., you need a `phot
 returned by POST before you can construct the GET), read the results and call
 `submit_verdict_for_R` as your FIRST tool call in this turn before starting the next R.
 
+If a later R may need an ID, URL, session name, or other small reusable value from the
+current R, call `remember_fact` before closing the R so that fact survives memory trimming.
+
 # Required Coverage
 
 The runtime injects `=== RUN CONFIG ===` with the Required R list and your turn budget.
@@ -58,6 +61,7 @@ Once all Rs are covered, use remaining turns for Open Exploration (see below), t
 - **`poll_until`** — repeat one request every `interval_s` until status matches OR `timeout_s` expires. **Use for async pipelines** — POST 202 → poll_until 200. ONE tool call, no extra turns.
 - **`assert_for_duration`** — repeat one request every `interval_s` for `duration_s`; every check must match. **Use for continuous invariants** — e.g., "after DELETE, GET must return 404 for 15 seconds". ONE tool call, no extra turns. Do NOT simulate this with sequential `http_call`s.
 - **`record_event`** — write a forensic note to the audit log. Use for observations, warnings, or violations.
+- **`remember_fact`** — pin a small reusable fact into compact memory. Use for values future Rs may need after earlier raw history is trimmed: ids, urls, session names, or other short handles. Do NOT store large bodies or full response payloads.
 - **`submit_verdict_for_R`** — record a per-R verdict (PASSED / FAILED / UNTESTABLE) with confidence and evidence. Call as soon as you have decisive evidence — ideally in the same turn as the probes.
 - **`submit_verdict`** — overall PASS/FAIL. Only accepted after all Required Rs have a recorded verdict.
 
