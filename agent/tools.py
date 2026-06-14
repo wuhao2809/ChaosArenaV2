@@ -1,6 +1,6 @@
 """Tool implementations for the ChaosArena MVP agent.
 
-Ten tools are exposed to Claude:
+Thirteen tools are exposed to Claude:
 
   - http_call(method, path, body, headers): single stateless HTTP request
   - http_call_with_session(session_id, method, path, body, headers): single
@@ -9,7 +9,8 @@ Ten tools are exposed to Claude:
       session_id. Use for auth flows: POST /login on session "alice" sets a
       cookie; subsequent calls with session_id="alice" carry it.
   - parallel_n(n, method, path, body, headers): N concurrent identical requests,
-      returns aggregate stats (status histogram, p50/p95/p99 latency)
+      returns aggregate stats (status histogram, p50/p95/p99 latency), and
+      optionally compact per-response bodies when collect_bodies=true
   - race_pair(action_a, action_b): two DIFFERENT actions released by a shared
       barrier; returns each action's result plus the timing skew between
       release points.
@@ -24,16 +25,22 @@ Ten tools are exposed to Claude:
       must satisfy expect_status. Returns first violation timestamp if held
       breaks. Use for invariants like "after DELETE, GET returns 404 for at
       least 15 seconds".
+  - monitor_while(monitor_request, foreground_action, expect_status, ...):
+      sample a monitor endpoint in the background while a foreground action
+      executes, then optionally continue monitoring for a short post-action
+      window. Use for transient invariant violations.
   - record_event(event_type, detail): write a forensic event to the audit log
+  - set_R_context(r_ids, reason): set the persistent Required-R context that
+      subsequent probe calls are charged to until changed.
   - remember_fact(key, value, note): pin a reusable fact into compact memory
   - submit_verdict_for_R(r_id, verdict, confidence, evidence): per-R structured
       verdict. Agent must call this for each Required category in cover_all
       mode before submit_verdict is accepted.
   - submit_verdict(verdict, reasoning): overall verdict; ends the run.
 
-submit_verdict_for_R and submit_verdict are both handled specially by the
-runner (see runner.py); they have schema entries here but no dispatch
-functions — the runner intercepts them.
+set_R_context, remember_fact, submit_verdict_for_R, and submit_verdict are
+handled specially by the runner (see runner.py); they have schema entries here
+but no dispatch functions — the runner intercepts them.
 """
 
 import os
@@ -233,6 +240,8 @@ TOOL_SCHEMAS: list[dict] = [
             "Fire N identical HTTP requests CONCURRENTLY against the target service. "
             "Returns aggregate statistics: per-status-code histogram, count of non-2xx "
             "responses, latency percentiles (p50/p95/p99), and elapsed wall time. "
+            "Set collect_bodies=true when the response payload itself is the evidence "
+            "(for example concurrent photo uploads that must return unique photo_id/seq). "
             "Use this to test concurrency / race / load behavior — any 5xx under "
             "concurrent load typically indicates a thread-safety bug in the target."
         ),
@@ -272,6 +281,19 @@ TOOL_SCHEMAS: list[dict] = [
                     },
                     "required": ["field"],
                 },
+                "collect_bodies": {
+                    "type": "boolean",
+                    "description": (
+                        "If true, include compact per-response bodies/statuses in the result. "
+                        "Use only when response fields such as ids or sequence numbers are required evidence."
+                    ),
+                },
+                "max_bodies": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "description": "Maximum number of response bodies to return when collect_bodies=true. Default 20.",
+                },
             },
             "required": ["n", "method", "path"],
         },
@@ -298,6 +320,17 @@ TOOL_SCHEMAS: list[dict] = [
                         "path": {"type": "string"},
                         "body": {"type": ["object", "null"]},
                         "headers": {"type": ["object", "null"]},
+                        "multipart": {
+                            "type": ["object", "null"],
+                            "description": "Same as http_call multipart — sends multipart/form-data for this action.",
+                            "properties": {
+                                "field": {"type": "string"},
+                                "filename": {"type": "string"},
+                                "content_type": {"type": "string"},
+                                "size_bytes": {"type": "integer", "minimum": 0},
+                            },
+                            "required": ["field"],
+                        },
                     },
                     "required": ["method", "path"],
                 },
@@ -309,6 +342,17 @@ TOOL_SCHEMAS: list[dict] = [
                         "path": {"type": "string"},
                         "body": {"type": ["object", "null"]},
                         "headers": {"type": ["object", "null"]},
+                        "multipart": {
+                            "type": ["object", "null"],
+                            "description": "Same as http_call multipart — sends multipart/form-data for this action.",
+                            "properties": {
+                                "field": {"type": "string"},
+                                "filename": {"type": "string"},
+                                "content_type": {"type": "string"},
+                                "size_bytes": {"type": "integer", "minimum": 0},
+                            },
+                            "required": ["field"],
+                        },
                     },
                     "required": ["method", "path"],
                 },
@@ -340,6 +384,17 @@ TOOL_SCHEMAS: list[dict] = [
                             "path": {"type": "string"},
                             "body": {"type": ["object", "null"]},
                             "headers": {"type": ["object", "null"]},
+                            "multipart": {
+                                "type": ["object", "null"],
+                                "description": "Same as http_call multipart — sends multipart/form-data for this action.",
+                                "properties": {
+                                    "field": {"type": "string"},
+                                    "filename": {"type": "string"},
+                                    "content_type": {"type": "string"},
+                                    "size_bytes": {"type": "integer", "minimum": 0},
+                                },
+                                "required": ["field"],
+                            },
                         },
                         "required": ["method", "path"],
                     },
@@ -454,6 +509,77 @@ TOOL_SCHEMAS: list[dict] = [
         },
     },
     {
+        "name": "monitor_while",
+        "description": (
+            "Start a background monitor loop, execute one foreground HTTP action, "
+            "then optionally keep monitoring briefly after the action completes. "
+            "Use this for transient invariants that may be violated only during "
+            "another operation, e.g. 'resource must stay 404 while a background "
+            "worker races with DELETE'. Returns foreground_result, monitor check "
+            "counts, first violations, and a compact timeline. This is stronger "
+            "than sequential probing because the monitor runs concurrently with "
+            "the foreground action."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "monitor_request": {
+                    "type": "object",
+                    "description": "HTTP request to sample repeatedly in the background.",
+                    "properties": {
+                        "method": {"type": "string", "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"]},
+                        "path": {"type": "string"},
+                        "body": {"type": ["object", "null"]},
+                        "headers": {"type": ["object", "null"]},
+                    },
+                    "required": ["method", "path"],
+                },
+                "foreground_action": {
+                    "type": "object",
+                    "description": "Single HTTP action to execute while the monitor is running.",
+                    "properties": {
+                        "method": {"type": "string", "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"]},
+                        "path": {"type": "string"},
+                        "body": {"type": ["object", "null"]},
+                        "headers": {"type": ["object", "null"]},
+                    },
+                    "required": ["method", "path"],
+                },
+                "expect_status": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "minItems": 1,
+                    "description": "Monitor response status code(s) that are allowed on every check.",
+                },
+                "match_body_substring": {
+                    "type": ["string", "null"],
+                    "description": (
+                        "Optional. If provided, the monitor body must contain this substring on every check."
+                    ),
+                },
+                "interval_s": {
+                    "type": "number",
+                    "minimum": 0.05,
+                    "maximum": 5,
+                    "description": "Seconds between monitor checks. Default 0.25.",
+                },
+                "post_action_s": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 30,
+                    "description": "Seconds to keep monitoring after foreground_action returns. Default 2.",
+                },
+                "timeout_s": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 60,
+                    "description": "Hard timeout for the full monitor_while call. Default 30.",
+                },
+            },
+            "required": ["monitor_request", "foreground_action", "expect_status"],
+        },
+    },
+    {
         "name": "record_event",
         "description": (
             "Record a forensic event in the run's audit log. Use this to note "
@@ -474,6 +600,32 @@ TOOL_SCHEMAS: list[dict] = [
                 },
             },
             "required": ["event_type", "detail"],
+        },
+    },
+    {
+        "name": "set_R_context",
+        "description": (
+            "Set the persistent Required-R context for subsequent probe tools. "
+            "Use this before probe calls after the first discovery turn. Budget "
+            "for each probe turn is charged fractionally across the active r_ids "
+            "until this context is changed."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "r_ids": {
+                    "type": "array",
+                    "items": {"type": "string", "pattern": r"^R\d+$"},
+                    "minItems": 1,
+                    "maxItems": 6,
+                    "description": "Required R ids the next probe calls support, e.g. ['R5'] or ['R5','R8'].",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "One concise sentence explaining what this R context is testing.",
+                },
+            },
+            "required": ["r_ids", "reason"],
         },
     },
     {
@@ -739,6 +891,27 @@ def _percentile(sorted_values: list[float], p: float) -> float:
     return sorted_values[idx]
 
 
+def _compact_response_body(body: Any, max_text_chars: int = 1000) -> Any:
+    """Return a bounded response body suitable for concurrent result summaries."""
+    if isinstance(body, str):
+        if len(body) > max_text_chars:
+            return body[:max_text_chars] + f"... [truncated, {len(body)} chars total]"
+        return body
+    if isinstance(body, list):
+        compact = [_compact_response_body(item, max_text_chars=max_text_chars) for item in body[:20]]
+        if len(body) > 20:
+            compact.append({"_truncated_items": len(body) - 20})
+        return compact
+    if isinstance(body, dict):
+        compact: dict[str, Any] = {}
+        for key, value in list(body.items())[:30]:
+            compact[str(key)] = _compact_response_body(value, max_text_chars=max_text_chars)
+        if len(body) > 30:
+            compact["_truncated_keys"] = len(body) - 30
+        return compact
+    return body
+
+
 def parallel_n(
     n: int,
     method: str,
@@ -747,35 +920,57 @@ def parallel_n(
     body: dict | None = None,
     headers: dict | None = None,
     multipart: dict | None = None,
+    collect_bodies: bool = False,
+    max_bodies: int = 20,
 ) -> dict[str, Any]:
     """Fire N identical requests concurrently against the target."""
     statuses: list[int] = []
     latencies: list[int] = []
     network_errors: list[str] = []
+    response_samples: list[dict[str, Any]] = []
 
     overall_start = time.perf_counter()
     # Cap thread count at min(n, 50) — 50 is enough concurrency for our scale,
     # avoids exhausting fd / connection limits on slow targets.
     max_workers = min(n, 50)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [
-            executor.submit(http_call, method, path, target, body, headers, multipart)
-            for _ in range(n)
-        ]
+        futures = {
+            executor.submit(http_call, method, path, target, body, headers, multipart): idx
+            for idx in range(n)
+        }
         for f in as_completed(futures):
+            idx = futures[f]
             result = f.result()
             if result.get("status") is None:
                 network_errors.append(result.get("error", "unknown error"))
+                if collect_bodies and len(response_samples) < max_bodies:
+                    response_samples.append(
+                        {
+                            "request_index": idx,
+                            "status": None,
+                            "error": result.get("error"),
+                            "latency_ms": result.get("latency_ms"),
+                        }
+                    )
             else:
                 statuses.append(result["status"])
                 latencies.append(result["latency_ms"])
+                if collect_bodies and len(response_samples) < max_bodies:
+                    response_samples.append(
+                        {
+                            "request_index": idx,
+                            "status": result["status"],
+                            "body": _compact_response_body(result.get("body")),
+                            "latency_ms": result["latency_ms"],
+                        }
+                    )
     elapsed_ms = int((time.perf_counter() - overall_start) * 1000)
 
     latencies.sort()
     by_status = {str(code): count for code, count in Counter(statuses).items()}
     non_2xx_count = sum(1 for s in statuses if not (200 <= s < 300))
 
-    return {
+    output = {
         "n_requested": n,
         "completed": len(statuses),
         "by_status": by_status,
@@ -786,6 +981,11 @@ def parallel_n(
         "elapsed_ms": elapsed_ms,
         "network_errors": network_errors[:3],
     }
+    if collect_bodies:
+        response_samples.sort(key=lambda item: item.get("request_index", 0))
+        output["responses"] = response_samples
+        output["responses_truncated"] = max(0, n - len(response_samples))
+    return output
 
 
 def _execute_action_at_barrier(
@@ -807,6 +1007,7 @@ def _execute_action_at_barrier(
         target=target,
         body=action.get("body"),
         headers=action.get("headers"),
+        multipart=action.get("multipart"),
     )
     result["release_ts_ns"] = release_ts_ns
     return result
@@ -992,6 +1193,110 @@ def assert_for_duration(
     }
 
 
+def _monitor_check_ok(
+    result: dict[str, Any],
+    expect_set: set[int],
+    match_body_substring: str | None,
+) -> tuple[bool, str | None]:
+    status = result.get("status")
+    if status not in expect_set:
+        return False, f"status {status} not in expected {sorted(expect_set)}"
+    if match_body_substring is not None:
+        body_str = str(result.get("body", ""))
+        if match_body_substring not in body_str:
+            return False, f"body missing substring {match_body_substring!r}"
+    return True, None
+
+
+def monitor_while(
+    monitor_request: dict,
+    foreground_action: dict,
+    expect_status: list[int],
+    target: str,
+    match_body_substring: str | None = None,
+    interval_s: float = 0.25,
+    post_action_s: float = 2.0,
+    timeout_s: float = 30.0,
+) -> dict[str, Any]:
+    """Monitor one request concurrently while a foreground action executes."""
+    interval_s = max(0.05, min(float(interval_s), 5.0))
+    post_action_s = max(0.0, min(float(post_action_s), 30.0))
+    timeout_s = max(1.0, min(float(timeout_s), 60.0))
+
+    start = time.perf_counter()
+    deadline = start + timeout_s
+    expect_set = set(expect_status)
+    stop_event = threading.Event()
+    samples: list[dict[str, Any]] = []
+    violations: list[dict[str, Any]] = []
+    total_checks = 0
+
+    def monitor_loop() -> None:
+        nonlocal total_checks
+        check = 0
+        while not stop_event.is_set() and time.perf_counter() < deadline:
+            check += 1
+            total_checks = check
+            result = _do_request(monitor_request, target)
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            ok, reason = _monitor_check_ok(result, expect_set, match_body_substring)
+            sample = {
+                "check": check,
+                "elapsed_ms": elapsed_ms,
+                "status": result.get("status"),
+                "ok": ok,
+            }
+            if len(samples) < 20:
+                samples.append(sample)
+            if not ok and len(violations) < 10:
+                violations.append({
+                    **sample,
+                    "reason": reason,
+                    "body": result.get("body"),
+                })
+
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0:
+                break
+            stop_event.wait(min(interval_s, remaining))
+
+    thread = threading.Thread(target=monitor_loop, daemon=True)
+    thread.start()
+
+    # Give the monitor a chance to take an initial sample before perturbing the system.
+    time.sleep(min(interval_s, 0.1))
+    foreground_result = _do_request(foreground_action, target)
+    foreground_elapsed_ms = int((time.perf_counter() - start) * 1000)
+
+    post_deadline = min(deadline, time.perf_counter() + post_action_s)
+    while time.perf_counter() < post_deadline:
+        time.sleep(min(0.05, post_deadline - time.perf_counter()))
+
+    stop_event.set()
+    thread.join(timeout=1.0)
+
+    elapsed_ms = int((time.perf_counter() - start) * 1000)
+    return {
+        "held": not violations,
+        "elapsed_ms": elapsed_ms,
+        "foreground_elapsed_ms": foreground_elapsed_ms,
+        "foreground_result": foreground_result,
+        "monitor": {
+            "request": monitor_request,
+            "expect_status": sorted(expect_set),
+            "match_body_substring": match_body_substring,
+            "interval_s": interval_s,
+            "post_action_s": post_action_s,
+            "checks": total_checks,
+            "violations_count": len(violations),
+            "first_violation": violations[0] if violations else None,
+            "timeline": samples,
+            "violations": violations,
+        },
+        "timed_out": time.perf_counter() >= deadline,
+    }
+
+
 def record_event(event_type: str, detail: str) -> dict[str, Any]:
     """Append a forensic event to the run's audit log."""
     event = {
@@ -1034,6 +1339,8 @@ def dispatch_tool(name: str, input_args: dict, target: str) -> dict[str, Any]:
             body=input_args.get("body"),
             headers=input_args.get("headers"),
             multipart=input_args.get("multipart"),
+            collect_bodies=bool(input_args.get("collect_bodies", False)),
+            max_bodies=int(input_args.get("max_bodies", 20)),
         )
     if name == "race_pair":
         return race_pair(
@@ -1062,6 +1369,17 @@ def dispatch_tool(name: str, input_args: dict, target: str) -> dict[str, Any]:
             duration_s=input_args["duration_s"],
             target=target,
             interval_s=input_args.get("interval_s", 1.0),
+        )
+    if name == "monitor_while":
+        return monitor_while(
+            monitor_request=input_args["monitor_request"],
+            foreground_action=input_args["foreground_action"],
+            expect_status=input_args["expect_status"],
+            target=target,
+            match_body_substring=input_args.get("match_body_substring"),
+            interval_s=input_args.get("interval_s", 0.25),
+            post_action_s=input_args.get("post_action_s", 2.0),
+            timeout_s=input_args.get("timeout_s", 30.0),
         )
     if name == "record_event":
         return record_event(

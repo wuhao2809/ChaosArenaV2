@@ -35,6 +35,7 @@ class RequiredCategory:
     r_id: str          # e.g. "R1"
     title: str         # title after the period
     body: str          # body text until next ### or ##
+    estimated_turns: int = 2  # approximate budget from spec metadata, if present
 
 
 @dataclass
@@ -53,6 +54,21 @@ _R_HEADER_RE = re.compile(r"^###\s+(R\d+)\.\s+(.+?)\s*$", re.MULTILINE)
 
 # Match `## <Section Name>` at start of a line.
 _SECTION_RE = re.compile(r"^##\s+([^#].*?)\s*$", re.MULTILINE)
+_ESTIMATED_TURNS_RE = re.compile(
+    r"^\s*-\s+\*\*Estimated turns\*\*:\s*(\d+)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _parse_estimated_turns(body: str, default: int = 2) -> int:
+    """Extract `- **Estimated turns**: N` from an R body, clamped defensively."""
+    m = _ESTIMATED_TURNS_RE.search(body)
+    if not m:
+        return default
+    try:
+        return max(1, min(4, int(m.group(1))))
+    except ValueError:
+        return default
 
 
 def _slice_section(text: str, section_name: str) -> str:
@@ -85,7 +101,14 @@ def parse_spec(markdown: str) -> ParsedSpec:
             body_start = m.end()
             body_end = headers[i + 1].start() if i + 1 < len(headers) else len(required_section)
             body = required_section[body_start:body_end].strip()
-            required.append(RequiredCategory(r_id=r_id, title=title, body=body))
+            required.append(
+                RequiredCategory(
+                    r_id=r_id,
+                    title=title,
+                    body=body,
+                    estimated_turns=_parse_estimated_turns(body),
+                )
+            )
 
         if not required:
             import sys

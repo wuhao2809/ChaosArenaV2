@@ -64,7 +64,7 @@ tags. Skipping the thinking phase produces shallow happy-path specs.
   Step 5. For each item from Steps 1-4, name at least one concrete
           failure mode and a black-box test that would expose it.
 
-  Step 6. Review your candidate list and do two things before emitting:
+  Step 6. Review your candidate list and do three things before emitting:
           (a) ASSIGN PRIORITY to each TestCase:
               HIGH   — maps directly to a known LLM-coauthored failure
                        pattern (lost write, async orphan, IDOR, oversize
@@ -74,7 +74,12 @@ tags. Skipping the thinking phase produces shallow happy-path specs.
                        idiosyncratic, not a systematic LLM pattern.
               LOW    — basic edge case with an obvious correct behavior;
                        provides coverage but rarely reveals real bugs.
-          (b) MERGE REDUNDANT cases: if two candidates test the same
+          (b) ASSIGN ESTIMATED TURNS to each TestCase:
+              1 — one decisive request or simple validation check.
+              2 — short multi-step flow, auth/session boundary, or async poll.
+              3 — race/concurrency case or multi-resource invariant.
+              4 — complex async/race scenario that needs setup + verification.
+          (c) MERGE REDUNDANT cases: if two candidates test the same
               endpoint with the same expected error under different
               surface inputs (e.g. "empty title → 400" and "missing
               title → 400"), collapse them into one case that names
@@ -107,21 +112,24 @@ Step 5 (failures): two members reserve the last copy at the same
 
 <output>
 {
+  "service_name": "library_reservations",
+  "description": "Members can reserve library books with limited copies; reservations expire if unused after 48 hours.",
   "race_conditions": [
-    {"name": "Last-copy concurrent reserve", "given": "Book has 1 copy left", "when": "Two members POST /reservations for that book within 10ms", "then": "Exactly one succeeds with 201; the other receives 409 Conflict; book.copies_available is 0", "priority": "HIGH"},
-    {"name": "Concurrent cancel of same reservation", "given": "A reservation exists", "when": "Two DELETE requests on the same reservation are issued in parallel", "then": "Exactly one returns 204; the other returns 404; book.copies_available increments by 1, not 2", "priority": "HIGH"}
+    {"name": "Last-copy concurrent reserve", "given": "Book has 1 copy left", "when": "Two members POST /reservations for that book within 10ms", "then": "Exactly one succeeds with 201; the other receives 409 Conflict; book.copies_available is 0", "priority": "HIGH", "estimated_turns": 3},
+    {"name": "Concurrent cancel of same reservation", "given": "A reservation exists", "when": "Two DELETE requests on the same reservation are issued in parallel", "then": "Exactly one returns 204; the other returns 404; book.copies_available increments by 1, not 2", "priority": "HIGH", "estimated_turns": 3}
   ],
   "async_invariants": [
-    {"name": "Expired reservation removed within 60s", "given": "A reservation is 48h old and unused", "when": "60 seconds elapse", "then": "GET reservation returns 404; book.copies_available is incremented", "priority": "HIGH"}
+    {"name": "Expired reservation removed within 60s", "given": "A reservation is 48h old and unused", "when": "60 seconds elapse", "then": "GET reservation returns 404; book.copies_available is incremented", "priority": "HIGH", "estimated_turns": 2}
   ],
   "auth_boundaries": [
-    {"name": "Cross-member reservation access", "given": "Member A has reservation R", "when": "Member B authenticates and GET /reservations/R", "then": "Response is 403 or 404; reservation details are not leaked", "priority": "HIGH"},
-    {"name": "Anonymous cancel attempt", "given": "Any reservation R exists", "when": "Anonymous client DELETE /reservations/R", "then": "401 Unauthorized; reservation unchanged", "priority": "MEDIUM"}
+    {"name": "Cross-member reservation access", "given": "Member A has reservation R", "when": "Member B authenticates and GET /reservations/R", "then": "Response is 403 or 404; reservation details are not leaked", "priority": "HIGH", "estimated_turns": 2},
+    {"name": "Anonymous cancel attempt", "given": "Any reservation R exists", "when": "Anonymous client DELETE /reservations/R", "then": "401 Unauthorized; reservation unchanged", "priority": "MEDIUM", "estimated_turns": 1}
   ],
   "edge_cases": [
-    {"name": "Negative book_id", "given": "No constraint on book_id sign", "when": "POST /reservations with book_id=-1", "then": "400 Bad Request; not 5xx", "priority": "LOW"},
-    {"name": "Oversize member name", "given": "Member name field accepts string", "when": "POST /reservations with name of 10000 chars", "then": "400 or 413; not 500 or silent truncation", "priority": "LOW"}
-  ]
+    {"name": "Negative book_id", "given": "No constraint on book_id sign", "when": "POST /reservations with book_id=-1", "then": "400 Bad Request; not 5xx", "priority": "LOW", "estimated_turns": 1},
+    {"name": "Oversize member name", "given": "Member name field accepts string", "when": "POST /reservations with name of 10000 chars", "then": "400 or 413; not 500 or silent truncation", "priority": "LOW", "estimated_turns": 1}
+  ],
+  "open_exploration_hint": "Probe whether reservation ids are predictable, whether expired reservations can still be cancelled, and whether scheduler timing creates stale availability windows."
 }
 </output>
 </example>
@@ -148,22 +156,25 @@ Step 5 (failures): two users in same workspace concurrently add comments
 
 <output>
 {
+  "service_name": "workspace_projects",
+  "description": "A multi-tenant project-management API where projects belong to workspaces, users belong to workspaces, and tasks/comments are scoped to those projects.",
   "race_conditions": [
-    {"name": "Concurrent comment add", "given": "A task exists", "when": "Two workspace members POST a comment within 10ms", "then": "Both 201; both comments persist; comment_count == 2 (no lost write)", "priority": "HIGH"},
-    {"name": "Concurrent task delete + comment", "given": "A task exists", "when": "User A DELETEs task while User B POSTs a comment to it (parallel)", "then": "Either DELETE wins (comment 404) or comment wins (task delete 409); not both succeed leaving an orphan comment", "priority": "HIGH"}
+    {"name": "Concurrent comment add", "given": "A task exists", "when": "Two workspace members POST a comment within 10ms", "then": "Both 201; both comments persist; comment_count == 2 (no lost write)", "priority": "HIGH", "estimated_turns": 3},
+    {"name": "Concurrent task delete + comment", "given": "A task exists", "when": "User A DELETEs task while User B POSTs a comment to it (parallel)", "then": "Either DELETE wins (comment 404) or comment wins (task delete 409); not both succeed leaving an orphan comment", "priority": "HIGH", "estimated_turns": 3}
   ],
   "async_invariants": {
     "n_a_justification": "Service is described as fully synchronous CRUD; no queues, retries, or schedulers were mentioned. Probe lightly during Open Exploration; do not require a Required test."
   },
   "auth_boundaries": [
-    {"name": "Cross-workspace project read", "given": "Workspace A has project P", "when": "User in workspace B authenticates and GETs /projects/P", "then": "403 or 404; no project metadata leaks", "priority": "HIGH"},
-    {"name": "Cross-workspace task read by ID", "given": "Task T belongs to project P in workspace A", "when": "User in workspace B GETs /tasks/T directly", "then": "403 or 404", "priority": "MEDIUM"},
-    {"name": "Cross-workspace task delete", "given": "Same as above", "when": "User in workspace B DELETEs /tasks/T", "then": "403 or 404; task survives", "priority": "MEDIUM"}
+    {"name": "Cross-workspace project read", "given": "Workspace A has project P", "when": "User in workspace B authenticates and GETs /projects/P", "then": "403 or 404; no project metadata leaks", "priority": "HIGH", "estimated_turns": 2},
+    {"name": "Cross-workspace task read by ID", "given": "Task T belongs to project P in workspace A", "when": "User in workspace B GETs /tasks/T directly", "then": "403 or 404", "priority": "MEDIUM", "estimated_turns": 2},
+    {"name": "Cross-workspace task delete", "given": "Same as above", "when": "User in workspace B DELETEs /tasks/T", "then": "403 or 404; task survives", "priority": "MEDIUM", "estimated_turns": 2}
   ],
   "edge_cases": [
-    {"name": "Oversize comment", "given": "POST /comments accepts body", "when": "comment_body is 10MB", "then": "413 Payload Too Large or 400; not 500 or silent truncation", "priority": "LOW"},
-    {"name": "Script-tag in title", "given": "task_title field accepts string", "when": "POST /tasks with title='<script>alert(1)</script>'", "then": "201 with title preserved as plain text or sanitized; no server error and no auto-execution context indicated", "priority": "LOW"}
-  ]
+    {"name": "Oversize comment", "given": "POST /comments accepts body", "when": "comment_body is 10MB", "then": "413 Payload Too Large or 400; not 500 or silent truncation", "priority": "LOW", "estimated_turns": 1},
+    {"name": "Script-tag in title", "given": "task_title field accepts string", "when": "POST /tasks with title='<script>alert(1)</script>'", "then": "201 with title preserved as plain text or sanitized; no server error and no auto-execution context indicated", "priority": "LOW", "estimated_turns": 1}
+  ],
+  "open_exploration_hint": "Probe direct object ids across projects, pagination/filter leakage across workspaces, and whether deleted tasks leave visible comments or attachments."
 }
 </output>
 </example>
@@ -184,6 +195,8 @@ Step 5 (failures): negative n, 0, very large n (DoS), non-integer n.
 
 <output>
 {
+  "service_name": "prime_factorization",
+  "description": "A stateless prime-factorization service with one GET /factor?n=N endpoint and no users, database, or authentication.",
   "race_conditions": {
     "n_a_justification": "Service is purely stateless compute; concurrent calls cannot share state and therefore cannot race."
   },
@@ -194,11 +207,12 @@ Step 5 (failures): negative n, 0, very large n (DoS), non-integer n.
     "n_a_justification": "Spec describes no authentication or authorization layer; all callers are equivalent. (Probe during Open Exploration whether unauthenticated access leaks unintended info.)"
   },
   "edge_cases": [
-    {"name": "Negative integer", "given": "n is signed", "when": "GET /factor?n=-5", "then": "400 Bad Request; not 500", "priority": "HIGH"},
-    {"name": "Zero", "given": "0 has no prime factorization", "when": "GET /factor?n=0", "then": "400 Bad Request with explanatory message; not empty 200", "priority": "HIGH"},
-    {"name": "Non-integer", "given": "n parsed as int", "when": "GET /factor?n=abc", "then": "400 Bad Request; not 500", "priority": "MEDIUM"},
-    {"name": "Very large input", "given": "Computation can be expensive", "when": "GET /factor?n=10^18", "then": "Either completes within timeout or returns 503/429; never hangs the server indefinitely", "priority": "HIGH"}
-  ]
+    {"name": "Negative integer", "given": "n is signed", "when": "GET /factor?n=-5", "then": "400 Bad Request; not 500", "priority": "HIGH", "estimated_turns": 1},
+    {"name": "Zero", "given": "0 has no prime factorization", "when": "GET /factor?n=0", "then": "400 Bad Request with explanatory message; not empty 200", "priority": "HIGH", "estimated_turns": 1},
+    {"name": "Non-integer", "given": "n parsed as int", "when": "GET /factor?n=abc", "then": "400 Bad Request; not 500", "priority": "MEDIUM", "estimated_turns": 1},
+    {"name": "Very large input", "given": "Computation can be expensive", "when": "GET /factor?n=10^18", "then": "Either completes within timeout or returns 503/429; never hangs the server indefinitely", "priority": "HIGH", "estimated_turns": 2}
+  ],
+  "open_exploration_hint": "Probe repeated expensive inputs for rate limiting, malformed query strings, and whether errors reveal stack traces or implementation details."
 }
 </output>
 </example>
@@ -223,7 +237,8 @@ fence) matching this schema:
 Where:
   TestCases = [TestCase, ...]   (non-empty array)
   TestCase  = { "name": str, "given": str, "when": str, "then": str,
-                "priority": "HIGH" | "MEDIUM" | "LOW" }
+                "priority": "HIGH" | "MEDIUM" | "LOW",
+                "estimated_turns": 1 | 2 | 3 | 4 }
   NA        = { "n_a_justification": str }   (one sentence)
 
 Priority rules (required on every TestCase — see Step 6):
@@ -231,6 +246,12 @@ Priority rules (required on every TestCase — see Step 6):
            buggy implementation.
   MEDIUM — specified behavior, non-systematic failure mode.
   LOW    — obvious correct behavior; coverage only.
+
+Estimated-turn rules (required on every TestCase — see Step 6):
+  1 — simple CRUD/validation/error-code probe where the verdict can be emitted in the same turn.
+  2 — short multi-step flow, session/auth check, or async `poll_until` case.
+  3 — race/concurrency or temporal invariant requiring setup and one specialized tool call.
+  4 — complex async/race scenario requiring setup, foreground action, monitor/poll, and aftermath check.
 
 Do NOT include the <thinking> block in the JSON output. The thinking
 goes in your reasoning trace; the user only sees the JSON.
@@ -240,6 +261,8 @@ goes in your reasoning trace; the user only sees the JSON.
 After producing the JSON, before returning, mentally re-read your output:
   - Is every required-category section present (race_conditions,
     async_invariants, auth_boundaries, edge_cases)?
+  - Are service_name, description, and open_exploration_hint present at
+    top level?
   - For each populated category, did your <thinking> Step 1-4 surface
     something that you then forgot to put in the JSON?
   - Is each TestCase's "then" specific (status code or precise
@@ -248,6 +271,8 @@ After producing the JSON, before returning, mentally re-read your output:
     don't waste a Required slot on it.)
   - Does every TestCase have a "priority" field set to HIGH, MEDIUM,
     or LOW? Missing or misspelled priority values are not allowed.
+  - Does every TestCase have an "estimated_turns" integer from 1 to 4?
+    Missing or out-of-range estimated_turns values are not allowed.
   - Did you merge any redundant cases (same endpoint, same expected
     error, different surface inputs) into a single TestCase?
 

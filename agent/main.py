@@ -4,7 +4,7 @@ All output files are named from a single --run-id:
 
   <run-id>_spec.md     → specs/          (only when --nl-input drafts a spec)
   run_<run-id>.json    → trace/          (always written)
-  <run-id>_memory.json → memory/         (always written)
+  run_<run-id>_messages.json → trace/    (always written)
   <run-id>_verdict.md  → Verdict/        (always written)
 
 Usage examples:
@@ -19,6 +19,12 @@ Usage examples:
                  --target http://localhost:8080 \\
                  --run-id default_baseline_001
 
+  # Run from a large spec using pseudo multi-agent executor batches:
+  python main.py --spec ../specs/new_memory_album_test_overall_spec.md \\
+                 --target http://localhost:8080 \\
+                 --run-id album_pseudo_001 \\
+                 --pseudo-multi-agent
+
   # Draft only (no evaluation):
   python main.py --nl-input ../nl_specs/album_store.txt \\
                  --draft-only --run-id album_store_spec_v1
@@ -32,6 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from config.config import DEFAULT_MAX_TURNS
+from pseudo_multi_agent import run_pseudo_multi_agent
 from runner import run_agent
 from spec_drafter import draft_spec
 
@@ -52,7 +59,7 @@ def _output_paths(run_id: str, script_dir: Path) -> dict[str, Path]:
     return {
         "spec":   script_dir.parent / "specs"  / f"{run_id}_spec.md",
         "trace":  script_dir        / "trace"  / f"run_{run_id}.json",
-        "memory": script_dir        / "memory" / f"{run_id}_memory.json",
+        "messages": script_dir      / "trace"  / f"run_{run_id}_messages.json",
         "verdict": script_dir       / "Verdict" / f"{run_id}_verdict.md",
     }
 
@@ -231,7 +238,7 @@ def _print_verdict(result: dict, drafter_usage: dict | None, paths: dict[str, Pa
 
     print()
     print(f"[outputs] trace  → {paths['trace']}")
-    print(f"[outputs] memory → {paths['memory']}")
+    print(f"[outputs] messages → {paths['messages']}")
     print(f"[outputs] verdict → {paths['verdict']}")
 
 
@@ -247,7 +254,7 @@ def main() -> int:
             "All outputs are named from --run-id:\n"
             "  specs/<run-id>_spec.md     (when --nl-input is used)\n"
             "  trace/run_<run-id>.json    (always)\n"
-            "  memory/<run-id>_memory.json (always)\n"
+            "  trace/run_<run-id>_messages.json (always)\n"
             "  Verdict/<run-id>_verdict.md (always)\n"
         ),
     )
@@ -268,7 +275,7 @@ def main() -> int:
         default=None,
         help=(
             "Name for this run. Controls all output filenames: "
-            "<run-id>_spec.md / <run-id>_trace.json / <run-id>_memory.json. "
+            "<run-id>_spec.md / run_<run-id>.json / run_<run-id>_messages.json. "
             "Example: 'race_bugmode_001'. Defaults to a UTC timestamp."
         ),
     )
@@ -300,6 +307,14 @@ def main() -> int:
         action="store_true",
         help="Skip all interactive prompts (spec trim, run confirmation, max-turns). "
              "Useful for CI / scripting.",
+    )
+    parser.add_argument(
+        "--pseudo-multi-agent",
+        action="store_true",
+        help=(
+            "Split Required Rs into small executor batches, run the existing "
+            "agent once per batch, then aggregate per-R verdicts."
+        ),
     )
 
     args = parser.parse_args()
@@ -386,17 +401,27 @@ def main() -> int:
         except (ValueError, EOFError):
             pass
 
-    for p in (paths["trace"], paths["memory"]):
+    for p in (paths["trace"], paths["messages"]):
         p.parent.mkdir(parents=True, exist_ok=True)
 
-    result = run_agent(
-        system_prompt=system_prompt,
-        spec=spec,
-        target=args.target.rstrip("/"),
-        dump_messages_to=paths["memory"],
-        max_turns=args.max_turns,
-        run_id_override=run_id,
-    )
+    if args.pseudo_multi_agent:
+        result = run_pseudo_multi_agent(
+            system_prompt=system_prompt,
+            spec=spec,
+            target=args.target.rstrip("/"),
+            dump_messages_to=paths["messages"],
+            max_turns=args.max_turns,
+            run_id_override=run_id,
+        )
+    else:
+        result = run_agent(
+            system_prompt=system_prompt,
+            spec=spec,
+            target=args.target.rstrip("/"),
+            dump_messages_to=paths["messages"],
+            max_turns=args.max_turns,
+            run_id_override=run_id,
+        )
 
     _write_verdict_report(result, drafter_usage, paths["verdict"])
     _print_verdict(result, drafter_usage, paths)

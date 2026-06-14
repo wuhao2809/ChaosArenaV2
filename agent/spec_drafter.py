@@ -29,6 +29,7 @@ from config.config import (
     BEDROCK_PRICING_VERSION, INPUT_COST_PER_MTOK, OUTPUT_COST_PER_MTOK,
     CACHE_CREATION_PER_MTOK, CACHE_READ_PER_MTOK,
     CATEGORY_TURN_COST, PRIORITY_ORDER,
+    DEFAULT_R_ESTIMATED_TURNS, MIN_R_ESTIMATED_TURNS, MAX_R_ESTIMATED_TURNS,
 )
 
 
@@ -123,10 +124,23 @@ def _validate_spec_json(payload: dict) -> dict:
                         f"{cat}[{i}] priority must be HIGH/MEDIUM/LOW, "
                         f"got {tc['priority']!r}"
                     )
+                tc["estimated_turns"] = _coerce_estimated_turns(
+                    tc.get("estimated_turns"),
+                    CATEGORY_TURN_COST.get(cat, DEFAULT_R_ESTIMATED_TURNS),
+                )
         else:
             raise ValueError(f"Category {cat} must be list or n_a dict, got {type(v).__name__}")
 
     return payload
+
+
+def _coerce_estimated_turns(value: object, default: int = DEFAULT_R_ESTIMATED_TURNS) -> int:
+    """Return a conservative per-R turn estimate bounded for runner enforcement."""
+    try:
+        estimate = int(value) if value is not None else int(default)
+    except (TypeError, ValueError):
+        estimate = int(default)
+    return max(MIN_R_ESTIMATED_TURNS, min(MAX_R_ESTIMATED_TURNS, estimate))
 
 
 def _render_markdown(spec: dict) -> str:
@@ -178,6 +192,10 @@ def _render_markdown(spec: dict) -> str:
                 lines.append(f"- **When**: {tc['when']}")
                 lines.append(f"- **Then**: {tc['then']}")
                 lines.append(f"- **Priority**: {tc.get('priority', 'MEDIUM')}")
+                lines.append(
+                    f"- **Estimated turns**: "
+                    f"{_coerce_estimated_turns(tc.get('estimated_turns'), CATEGORY_TURN_COST[cat])}"
+                )
                 lines.append("")
                 r_counter += 1
 
@@ -210,7 +228,7 @@ def _estimate_run_turns(spec: dict) -> int:
     for cat, cost in CATEGORY_TURN_COST.items():
         v = spec.get(cat, {})
         if isinstance(v, list):
-            total += len(v) * cost
+            total += sum(_coerce_estimated_turns(tc.get("estimated_turns"), cost) for tc in v)
     return total
 
 
@@ -232,8 +250,8 @@ def _interactive_trim(spec: dict) -> dict:
     for cat in ("race_conditions", "async_invariants", "auth_boundaries", "edge_cases"):
         v = spec.get(cat, {})
         if isinstance(v, list):
-            cost = CATEGORY_TURN_COST[cat]
             for i, tc in enumerate(v):
+                cost = _coerce_estimated_turns(tc.get("estimated_turns"), CATEGORY_TURN_COST[cat])
                 rows.append((cat, i, tc, cost))
 
     if not rows:
@@ -256,8 +274,9 @@ def _interactive_trim(spec: dict) -> dict:
     total_turns = sum(r[3] for r in rows)
     high_rs    = [(cat, idx) for cat, idx, tc, _ in rows if tc.get("priority") == "HIGH"]
     med_rs     = [(cat, idx) for cat, idx, tc, _ in rows if tc.get("priority") in ("HIGH", "MEDIUM")]
-    high_turns = sum(CATEGORY_TURN_COST[cat] for cat, _ in high_rs)
-    med_turns  = sum(CATEGORY_TURN_COST[cat] for cat, _ in med_rs)
+    cost_by_key = {(cat, idx): cost for cat, idx, _, cost in rows}
+    high_turns = sum(cost_by_key[(cat, idx)] for cat, idx in high_rs)
+    med_turns = sum(cost_by_key[(cat, idx)] for cat, idx in med_rs)
 
     # Suggest a cutoff based on the turn budget.
     if total_turns <= DEFAULT_MAX_TURNS * 0.8:

@@ -23,6 +23,8 @@ from config.config import (
     DEFAULT_BEDROCK_MODEL, DEFAULT_DIRECT_MODEL,
     BEDROCK_PRICING_VERSION, INPUT_COST_PER_MTOK, OUTPUT_COST_PER_MTOK,
     CACHE_CREATION_PER_MTOK, CACHE_READ_PER_MTOK, ENABLE_R_CONTEXT_TRIMMING,
+    DEFAULT_R_ESTIMATED_TURNS, MIN_R_ESTIMATED_TURNS, MAX_R_ESTIMATED_TURNS,
+    NO_VERDICT_DRIFT_TURNS,
 )
 from conversation_memory import Memory, RequiredCategorySpec
 from tools import EVENT_LOG, SESSIONS, TOOL_SCHEMAS, dispatch_tool
@@ -68,6 +70,69 @@ def _print_block_text(content_blocks: list) -> None:
 
 def _truncate(s: str, n: int = 200) -> str:
     return s if len(s) <= n else s[:n] + f"... [truncated, {len(s)} total]"
+
+
+def _coerce_r_estimate(value: object) -> int:
+    try:
+        estimate = int(value)
+    except (TypeError, ValueError):
+        estimate = DEFAULT_R_ESTIMATED_TURNS
+    return max(MIN_R_ESTIMATED_TURNS, min(MAX_R_ESTIMATED_TURNS, estimate))
+
+
+def _format_r_budget_lines(parsed_spec: ParsedSpec) -> list[str]:
+    lines = ["Per-R estimated turns (advisory; set_R_context controls budget charging after turn 1):"]
+    for r in parsed_spec.required:
+        estimated = _coerce_r_estimate(getattr(r, "estimated_turns", DEFAULT_R_ESTIMATED_TURNS))
+        lines.append(f"- {r.r_id}: estimated {estimated}")
+    return lines
+
+
+def _is_probe_tool(tool_name: str) -> bool:
+    return tool_name not in {
+        "set_R_context",
+        "remember_fact",
+        "submit_verdict_for_R",
+        "submit_verdict",
+        "record_event",
+    }
+
+
+def _normalize_r_ids(raw_r_ids: object, required_ids: list[str]) -> tuple[list[str], list[str]]:
+    """Return valid and invalid R ids from a context-setting argument."""
+    required = set(required_ids)
+    if raw_r_ids is None:
+        return [], []
+    values = raw_r_ids if isinstance(raw_r_ids, list) else [raw_r_ids]
+    valid: list[str] = []
+    invalid: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            invalid.append(str(value))
+            continue
+        r_id = value.strip().upper()
+        if r_id in required and r_id not in valid:
+            valid.append(r_id)
+        elif r_id not in required:
+            invalid.append(value)
+    return valid, invalid
+
+
+def _charge_explicit_r_usage(
+    r_budget_state: dict[str, dict[str, float]],
+    budget_r_ids: list[str],
+) -> float:
+    """Charge one probe turn fractionally across the active R context."""
+    if not budget_r_ids:
+        return 0.0
+    charge = round(1.0 / len(budget_r_ids), 4)
+    for r_id in budget_r_ids:
+        if r_id in r_budget_state:
+            r_budget_state[r_id]["used_turns"] = round(
+                float(r_budget_state[r_id].get("used_turns", 0.0)) + charge,
+                4,
+            )
+    return charge
 
 
 def _git_commit() -> str:
@@ -152,6 +217,7 @@ def _write_trace(
         "r_verdict_history": verdict.get("r_verdict_history", {}),
         "r_amendments": verdict.get("r_amendments", {}),
         "r_missing": verdict.get("r_missing", []),
+        "r_turn_budgets": verdict.get("r_turn_budgets", {}),
         "turns": turns_trace,
     }
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
@@ -190,6 +256,13 @@ def run_agent(
         RequiredCategorySpec(r_id=r.r_id, title=r.title, body=r.body)
         for r in parsed_spec.required
     ]
+    r_budget_state: dict[str, dict[str, float]] = {}
+    for r in parsed_spec.required:
+        estimated = _coerce_r_estimate(getattr(r, "estimated_turns", DEFAULT_R_ESTIMATED_TURNS))
+        r_budget_state[r.r_id] = {
+            "estimated_turns": estimated,
+            "used_turns": 0.0,
+        }
 
     client = get_client()
     model = get_model_id()
@@ -202,9 +275,13 @@ def run_agent(
         "Eval mode: cover_all. "
         "You MUST emit submit_verdict_for_R for every Required R before "
         "submit_verdict will be accepted. "
+        "After the first discovery turn, set_R_context must be active before "
+        "Required-R probe calls. The runner charges shared budget fractionally "
+        "across the active R context. "
         f"After all Rs are covered, use any remaining turns for Open Exploration. "
         f"Hard stop: call submit_verdict by turn {max_turns}."
     )
+    r_budget_text = "\n".join(_format_r_budget_lines(parsed_spec)) if required_ids else ""
 
     # Cache breakpoint 3: initial user message (spec + target + run config).
     # The spec text is static for the entire run — mark it so the API can
@@ -213,6 +290,7 @@ def run_agent(
         f"=== SPEC ===\n{spec}\n\n"
         f"=== TARGET ===\n{target}\n\n"
         f"=== RUN CONFIG ===\n{coverage_line}\n{mode_line}\n\n"
+        f"{r_budget_text}\n\n"
         f"Begin the evaluation."
     )
     initial_message = {"role": "user", "content": [
@@ -237,6 +315,12 @@ def run_agent(
     print(f"[runner] max_turns  = {max_turns}  temp={TEMPERATURE} (top_p/top_k recorded only)")
     print(f"[runner] eval_mode  = cover_all")
     print(f"[runner] required Rs = {required_ids}")
+    if r_budget_state:
+        budget_summary = ", ".join(
+            f"{r_id}:{state['used_turns']}/{state['estimated_turns']}"
+            for r_id, state in r_budget_state.items()
+        )
+        print(f"[runner] R budgets   = {budget_summary}  (used/estimated, advisory)")
     if len(required_ids) > 12:
         print(
             f"[runner] WARNING: {len(required_ids)} Required Rs — "
@@ -268,10 +352,21 @@ def run_agent(
     total_output = 0
     total_cache_creation = 0
     total_cache_read = 0
+    probe_turns_without_r_verdict = 0
+    current_r_context: list[str] = []
 
     for turn in range(1, max_turns + 1):
         print()
         print(f"--- Turn {turn} ---")
+
+        remaining_before_turn = [r for r in required_ids if r not in r_verdicts]
+        memory.update_budget_context(
+            turn=turn,
+            max_turns=max_turns,
+            remaining_r_ids=remaining_before_turn,
+            r_budget_state=r_budget_state,
+            current_r_context=current_r_context,
+        )
 
         response = client.messages.create(
             model=model,
@@ -322,6 +417,9 @@ def run_agent(
         tool_results: list[dict] = []
         completed_r_ids: list[str] = []
         verdict_seen = False
+        budget_r_ids: list[str] = []
+        probe_tool_seen = False
+        r_verdict_seen_this_turn = False
 
         for block in response.content:
             if block.type != "tool_use":
@@ -333,7 +431,37 @@ def run_agent(
 
             trace_call: dict[str, Any] = {"name": block.name, "args": block.input, "result": None}
 
-            if block.name == "submit_verdict_for_R":
+            if block.name == "set_R_context":
+                valid_r_ids, invalid_r_ids = _normalize_r_ids(block.input.get("r_ids"), required_ids)
+                if invalid_r_ids or not valid_r_ids:
+                    parts = []
+                    if not valid_r_ids:
+                        parts.append("no valid r_ids")
+                    if invalid_r_ids:
+                        parts.append(f"invalid r_ids: {invalid_r_ids}")
+                    ack = (
+                        f"REJECTED set_R_context: {', '.join(parts)}. "
+                        f"Valid Required ids: {required_ids}."
+                    )
+                else:
+                    current_r_context = valid_r_ids
+                    ack = (
+                        f"Active R context set to {current_r_context}. "
+                        "Subsequent probe calls inherit this context until changed."
+                    )
+                print(f"  ← {ack}")
+                trace_call["result"] = {
+                    "active_r_context": list(current_r_context),
+                    "ack": ack,
+                }
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": ack,
+                })
+
+            elif block.name == "submit_verdict_for_R":
+                r_verdict_seen_this_turn = True
                 r_id = block.input.get("r_id", "?")
                 prior_verdict = r_verdicts.get(r_id)
                 is_amendment = prior_verdict is not None
@@ -439,7 +567,23 @@ def run_agent(
                     })
 
             else:
-                result = dispatch_tool(block.name, block.input, target)
+                if _is_probe_tool(block.name):
+                    probe_tool_seen = True
+                all_covered = required_ids and not [r for r in required_ids if r not in r_verdicts]
+                requires_context = _is_probe_tool(block.name) and required_ids and turn > 1 and not all_covered
+                if requires_context and not current_r_context:
+                    result = {
+                        "blocked": True,
+                        "reason": (
+                            "Probe blocked because after the first discovery turn every Required-R "
+                            "probe requires an active R context. Call set_R_context first. "
+                            f"Valid Required ids: {required_ids}."
+                        ),
+                    }
+                else:
+                    result = dispatch_tool(block.name, block.input, target)
+                    if _is_probe_tool(block.name) and current_r_context:
+                        budget_r_ids = list(current_r_context)
                 result_str = json.dumps(result, ensure_ascii=False, default=str)
                 print(f"  ← {_truncate(result_str, 300)}")
                 trace_call["result"] = result
@@ -450,6 +594,10 @@ def run_agent(
                 })
 
             turn_tool_calls.append(trace_call)
+
+        fractional_charge = 0.0
+        if probe_tool_seen:
+            fractional_charge = _charge_explicit_r_usage(r_budget_state, budget_r_ids)
 
         turn_trace = {
             "turn": turn,
@@ -463,9 +611,68 @@ def run_agent(
             "text": turn_text,
             "tool_calls": turn_tool_calls,
             "memory": memory.metrics(),
+            "r_budget": {
+                r_id: dict(state)
+                for r_id, state in r_budget_state.items()
+            },
+            "budget_r_ids": list(budget_r_ids),
+            "r_budget_charge": fractional_charge,
+            "current_r_context": list(current_r_context),
         }
 
+        runtime_reminders: list[str] = []
+        if probe_tool_seen and required_ids and turn > 1:
+            if budget_r_ids:
+                over_estimate = [
+                    r_id for r_id in budget_r_ids
+                    if r_id not in r_verdicts
+                    and r_budget_state.get(r_id, {}).get("used_turns", 0.0)
+                    >= r_budget_state.get(r_id, {}).get("estimated_turns", 999.0)
+                ]
+                if over_estimate:
+                    details = ", ".join(
+                        f"{r_id} used {r_budget_state[r_id]['used_turns']:.2f}/"
+                        f"{r_budget_state[r_id]['estimated_turns']:.0f}"
+                        for r_id in over_estimate
+                    )
+                    runtime_reminders.append(
+                        f"[runtime budget] {details}. These estimates are advisory, "
+                        "but close any R with decisive evidence using submit_verdict_for_R."
+                    )
+            else:
+                runtime_reminders.append(
+                    "[runtime budget] This probe turn had no active R context. "
+                    "After the first discovery turn, call set_R_context before Required-R probes."
+                )
+
+        if probe_tool_seen and not r_verdict_seen_this_turn:
+            probe_turns_without_r_verdict += 1
+        elif r_verdict_seen_this_turn:
+            probe_turns_without_r_verdict = 0
+
+        if probe_turns_without_r_verdict >= NO_VERDICT_DRIFT_TURNS:
+            missing = [r for r in required_ids if r not in r_verdicts]
+            runtime_reminders.append(
+                f"[runtime reminder] {probe_turns_without_r_verdict} consecutive probe turn(s) "
+                "without submit_verdict_for_R. Before starting new probes, submit per-R "
+                f"verdicts for any decisive evidence already collected. Missing Rs: {missing}."
+            )
+
+        missing_now = [r for r in required_ids if r not in r_verdicts]
+        if missing_now and turn >= int(max_turns * 0.85):
+            runtime_reminders.append(
+                f"[runtime deadline] turn {turn}/{max_turns}; missing Required Rs: {missing_now}. "
+                "Stop opening broad new investigations. Submit verdicts for Rs with enough evidence; "
+                "mark only genuinely blocked Rs UNTESTABLE."
+            )
+
         if verdict_seen:
+            if runtime_reminders and tool_results:
+                tool_results[-1]["content"] = (
+                    str(tool_results[-1].get("content", ""))
+                    + "\n\n"
+                    + "\n".join(runtime_reminders)
+                )
             memory.record_tool_results(tool_results, turn=turn, turn_tool_calls=turn_tool_calls)
             if completed_r_ids:
                 memory.complete_rs([(r_id, r_verdicts[r_id]) for r_id in completed_r_ids])
@@ -478,11 +685,15 @@ def run_agent(
             # inject a hard stop reminder so the agent doesn't drift indefinitely.
             all_covered = required_ids and not [r for r in required_ids if r not in r_verdicts]
             if all_covered and turn >= int(max_turns * 0.85):
-                last = tool_results[-1]
-                last["content"] = (
-                    str(last.get("content", ""))
-                    + f"\n\n[runtime reminder] turn {turn}/{max_turns}; all Required Rs covered. "
-                    f"STOP exploration and call submit_verdict on the next turn."
+                runtime_reminders.append(
+                    f"[runtime reminder] turn {turn}/{max_turns}; all Required Rs covered. "
+                    "STOP exploration and call submit_verdict on the next turn."
+                )
+            if runtime_reminders:
+                tool_results[-1]["content"] = (
+                    str(tool_results[-1].get("content", ""))
+                    + "\n\n"
+                    + "\n".join(runtime_reminders)
                 )
             memory.record_tool_results(tool_results, turn=turn, turn_tool_calls=turn_tool_calls)
             if completed_r_ids:
@@ -522,6 +733,7 @@ def run_agent(
         if len(history) > 1
     }
     verdict["r_missing"] = [r for r in required_ids if r not in r_verdicts]
+    verdict["r_turn_budgets"] = {r_id: dict(state) for r_id, state in r_budget_state.items()}
 
     repro_meta["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
     verdict["repro"] = repro_meta

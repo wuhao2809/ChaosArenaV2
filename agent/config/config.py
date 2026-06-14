@@ -11,6 +11,10 @@ TEMPERATURE = 0.0               # lock sampling for reproducibility
 TOP_P_RECORDED = 1.0            # not sent to Bedrock; recorded for provenance
 TOP_K_RECORDED = 1              # not sent to Bedrock; recorded for provenance
 ENABLE_R_CONTEXT_TRIMMING = True  # archive completed R history outside the active prompt
+DEFAULT_R_ESTIMATED_TURNS = 2     # fallback when a hand-written spec omits per-R budget metadata
+MIN_R_ESTIMATED_TURNS = 1
+MAX_R_ESTIMATED_TURNS = 4
+NO_VERDICT_DRIFT_TURNS = 2        # probe turns without submit_verdict_for_R before hard reminder
 
 # ── Model IDs ──────────────────────────────────────────────────────────────
 # Bedrock requires a cross-region inference profile, not the base model ID.

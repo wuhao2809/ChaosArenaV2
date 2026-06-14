@@ -55,6 +55,7 @@ class Memory:
         self._completed_r_archives: list[dict[str, Any]] = []
         self._pinned_facts: dict[str, dict[str, Any]] = {}
         self._digest_message: dict[str, Any] | None = None
+        self._budget_context: dict[str, Any] | None = None
 
     def get_active_messages(self) -> list[dict[str, Any]]:
         return deepcopy(self._active_messages)
@@ -112,9 +113,6 @@ class Memory:
         self._live_turns[-1].tool_result_message = message
         self._live_turns[-1].tool_call_summaries = self._summarize_tool_calls(turn_tool_calls)
 
-    def complete_r(self, r_id: str, verdict: dict[str, Any]) -> None:
-        self.complete_rs([(r_id, verdict)])
-
     def complete_rs(self, completed_rs: list[tuple[str, dict[str, Any]]]) -> None:
         if not self._enable_r_context_trimming:
             return
@@ -157,12 +155,31 @@ class Memory:
         self._rebuild_active_messages()
         return deepcopy(fact)
 
+    def update_budget_context(
+        self,
+        turn: int,
+        max_turns: int,
+        remaining_r_ids: list[str],
+        r_budget_state: dict[str, dict[str, Any]],
+        current_r_context: list[str] | None = None,
+    ) -> None:
+        """Refresh the compact runtime budget shown in active memory."""
+        self._budget_context = {
+            "turn": turn,
+            "max_turns": max_turns,
+            "remaining_r_ids": list(remaining_r_ids),
+            "r_budget_state": deepcopy(r_budget_state),
+            "current_r_context": list(current_r_context or []),
+        }
+        self._rebuild_active_messages()
+
     def export_state(self) -> dict[str, Any]:
         return {
             "trimming_enabled": self._enable_r_context_trimming,
             "metrics": self.metrics(),
             "completed_r_archives": deepcopy(self._completed_r_archives),
             "pinned_facts": deepcopy(list(self._pinned_facts.values())),
+            "budget_context": deepcopy(self._budget_context),
             "active_digest": deepcopy(self._digest_message),
             "live_turns": [self._export_turn_slice(t) for t in self._live_turns],
             "full_message_count": len(self._full_messages),
@@ -182,15 +199,22 @@ class Memory:
         self._active_messages = rebuilt
 
     def _build_digest_message(self) -> dict[str, Any] | None:
-        if not self._completed_r_archives and not self._pinned_facts:
+        if not self._completed_r_archives and not self._pinned_facts and not self._budget_context:
             return None
 
-        lines = [
-            "=== COMPLETED R MEMORY DIGEST ===",
-            "Raw history for completed Required categories has been archived outside the active prompt.",
-            "Do not retest a completed R unless later evidence contradicts it.",
-            "If contradiction appears, resubmit submit_verdict_for_R with updated evidence.",
-        ]
+        lines = []
+        if self._budget_context:
+            lines.extend(self._build_budget_digest_lines())
+
+        if self._completed_r_archives or self._pinned_facts:
+            if lines:
+                lines.append("")
+            lines.extend([
+                "=== COMPLETED R MEMORY DIGEST ===",
+                "Raw history for completed Required categories has been archived outside the active prompt.",
+                "Do not retest a completed R unless later evidence contradicts it.",
+                "If contradiction appears, resubmit submit_verdict_for_R with updated evidence.",
+            ])
         if self._completed_r_archives:
             lines.extend(["", "Completed Required categories:"])
             for archive in self._completed_r_archives:
@@ -213,6 +237,37 @@ class Memory:
             "role": "user",
             "content": [{"type": "text", "text": "\n".join(lines)}],
         }
+
+    def _build_budget_digest_lines(self) -> list[str]:
+        context = self._budget_context or {}
+        turn = context.get("turn", "?")
+        max_turns = context.get("max_turns", "?")
+        remaining = context.get("remaining_r_ids", [])
+        budget_state = context.get("r_budget_state", {})
+        current_r_context = context.get("current_r_context", [])
+
+        lines = [
+            "=== ACTIVE R BUDGET STATUS ===",
+            f"Next turn: {turn}/{max_turns}.",
+        ]
+        if not remaining:
+            lines.append("Remaining Required Rs: none. Submit overall verdict after any brief Open Exploration.")
+            return lines
+
+        lines.append(f"Remaining Required Rs: {', '.join(remaining)}.")
+        if current_r_context:
+            lines.append(f"Current R context: {', '.join(current_r_context)}.")
+        else:
+            lines.append("Current R context: none. Call set_R_context before Required-R probes after turn 1.")
+        lines.append("Budget by remaining R (used / estimated turns):")
+        for r_id in remaining:
+            state = budget_state.get(r_id, {})
+            used = float(state.get("used_turns", 0.0) or 0.0)
+            estimated = int(state.get("estimated_turns", 0) or 0)
+            pressure = "over estimate" if estimated and used >= estimated else "ok"
+            lines.append(f"- {r_id}: {used:.2f} / {estimated} ({pressure})")
+        lines.append("Required-R probe tools after turn 1 require an active set_R_context.")
+        return lines
 
     def _build_r_archive(
         self,
@@ -290,6 +345,11 @@ class Memory:
                     pieces.append(f"latency_ms={result['latency_ms']}")
                 if "status_histogram" in result:
                     pieces.append(f"status_histogram={result['status_histogram']}")
+                if "held" in result:
+                    pieces.append(f"held={result['held']}")
+                monitor = result.get("monitor")
+                if isinstance(monitor, dict) and "violations_count" in monitor:
+                    pieces.append(f"violations_count={monitor['violations_count']}")
                 if "verdict" in result:
                     pieces.append(f"verdict={result['verdict']}")
                 result_summary = ", ".join(str(p) for p in pieces)
