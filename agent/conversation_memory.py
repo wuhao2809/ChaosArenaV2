@@ -75,6 +75,7 @@ class Memory:
             "full_transcript_chars": full_chars,
             "digest_chars": digest_chars,
             "live_turn_count": len(self._live_turns),
+            "amended_r_count": sum(1 for a in self._completed_r_archives if a.get("amended")),
         }
 
     def record_assistant_response(self, content_blocks: list[Any], turn: int) -> None:
@@ -121,7 +122,19 @@ class Memory:
         live_turns_snapshot = deepcopy(self._live_turns)
         for r_id, verdict in completed_rs:
             archive = self._build_r_archive(r_id, verdict, live_turns_snapshot)
-            self._completed_r_archives.append(archive)
+            existing_index = self._find_archive_index(r_id)
+            if existing_index is None:
+                self._completed_r_archives.append(archive)
+            else:
+                previous = self._completed_r_archives[existing_index]
+                versions = deepcopy(previous.get("versions", []))
+                if not versions:
+                    versions.append(self._archive_version(previous))
+                versions.append(self._archive_version(archive))
+                archive["amended"] = True
+                archive["amendment_count"] = len(versions) - 1
+                archive["versions"] = versions
+                self._completed_r_archives[existing_index] = archive
         self._live_turns = []
         self._rebuild_active_messages()
 
@@ -181,9 +194,10 @@ class Memory:
         if self._completed_r_archives:
             lines.extend(["", "Completed Required categories:"])
             for archive in self._completed_r_archives:
+                amendment = f"; amended {archive['amendment_count']}x" if archive.get("amended") else ""
                 lines.append(
                     f"- {archive['r_id']} ({archive['spec_title']}): {archive['verdict']} "
-                    f"[{archive['confidence']}] — {archive['summary']}"
+                    f"[{archive['confidence']}{amendment}] — {archive['summary']}"
                 )
 
         if self._pinned_facts:
@@ -227,7 +241,27 @@ class Memory:
             "confidence": verdict.get("confidence", "UNKNOWN"),
             "evidence": verdict.get("evidence", ""),
             "summary": " | ".join(part for part in summary_parts if part),
+            "amended": bool(verdict.get("amended", False)),
+            "amendment_count": int(verdict.get("amendment_count", 0) or 0),
+            "amendment": deepcopy(verdict.get("amendment")),
+            "versions": deepcopy(verdict.get("versions", [])),
             "turns": [self._export_turn_slice(t) for t in turn_slices],
+        }
+
+    def _find_archive_index(self, r_id: str) -> int | None:
+        for i, archive in enumerate(self._completed_r_archives):
+            if archive.get("r_id") == r_id:
+                return i
+        return None
+
+    @staticmethod
+    def _archive_version(archive: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "verdict": archive.get("verdict", "UNKNOWN"),
+            "confidence": archive.get("confidence", "UNKNOWN"),
+            "evidence": archive.get("evidence", ""),
+            "summary": archive.get("summary", ""),
+            "amendment": deepcopy(archive.get("amendment")),
         }
 
     @staticmethod

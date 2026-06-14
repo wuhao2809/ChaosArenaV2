@@ -83,8 +83,11 @@ def _write_verdict_report(result: dict, drafter_usage: dict | None, path: Path) 
         for r_id in required_ids:
             r = r_verdicts.get(r_id)
             if r:
+                amendment_suffix = ""
+                if r.get("amended"):
+                    amendment_suffix = f", amended {r.get('amendment_count', 1)}x"
                 lines.extend([
-                    f"### {r_id}: {r.get('verdict', 'UNKNOWN')} ({r.get('confidence', 'UNKNOWN')})",
+                    f"### {r_id}: {r.get('verdict', 'UNKNOWN')} ({r.get('confidence', 'UNKNOWN')}{amendment_suffix})",
                     "",
                     r.get("evidence", "").strip() or "(no evidence provided)",
                     "",
@@ -93,6 +96,20 @@ def _write_verdict_report(result: dict, drafter_usage: dict | None, path: Path) 
                 lines.extend([f"### {r_id}: Missing verdict", ""])
     else:
         lines.extend(["No Required categories were parsed.", ""])
+
+    amendments = result.get("r_amendments") or {}
+    if amendments:
+        lines.extend(["## Verdict Amendments", ""])
+        for r_id, item in amendments.items():
+            lines.append(f"### {r_id}")
+            lines.append("")
+            for i, version in enumerate(item.get("history", []), start=1):
+                label = "initial" if i == 1 else f"amendment {i - 1}"
+                lines.append(
+                    f"- {label}: {version.get('verdict', 'UNKNOWN')} "
+                    f"({version.get('confidence', 'UNKNOWN')}) — {version.get('evidence', '')}"
+                )
+            lines.append("")
 
     findings = result.get("exploratory_findings") or []
     lines.extend(["## Exploratory Findings", ""])
@@ -162,9 +179,15 @@ def _print_verdict(result: dict, drafter_usage: dict | None, paths: dict[str, Pa
         for r_id in result.get("required_ids", []):
             r = rs.get(r_id)
             if r:
-                print(f"   {r_id}: {r['verdict']:<11} (conf={r['confidence']})")
+                amended = f", amended {r.get('amendment_count', 1)}x" if r.get("amended") else ""
+                print(f"   {r_id}: {r['verdict']:<11} (conf={r['confidence']}{amended})")
             else:
                 print(f"   {r_id}: (no verdict)")
+
+    amendments = result.get("r_amendments") or {}
+    if amendments:
+        amended_ids = ", ".join(amendments)
+        print(f"[amendments] {len(amendments)} R(s) amended: {amended_ids}")
 
     findings = result.get("exploratory_findings") or []
     if findings:

@@ -513,9 +513,12 @@ TOOL_SCHEMAS: list[dict] = [
         "description": (
             "Record a per-R-category verdict. Call this once per Required test "
             "category (R1, R2, ...) as soon as you have decisive evidence for "
-            "that category — do not wait until the end. The runner tracks "
-            "which Rs have been recorded and returns the remaining set in the "
-            "tool result so you can manage your turn budget."
+            "that category — do not wait until the end. If later evidence "
+            "contradicts an earlier verdict, call this again for the same R; "
+            "the runner records an amendment history and the latest verdict "
+            "is used in the final report. The runner tracks which Rs have "
+            "been recorded and returns the remaining set in the tool result "
+            "so you can manage your turn budget."
         ),
         "input_schema": {
             "type": "object",

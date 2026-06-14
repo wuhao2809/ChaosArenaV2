@@ -149,6 +149,8 @@ def _write_trace(
         "total_tool_calls": total_tool_calls,
         "total_cost_usd": round(total_cost, 6),
         "r_verdicts": verdict.get("r_verdicts", {}),
+        "r_verdict_history": verdict.get("r_verdict_history", {}),
+        "r_amendments": verdict.get("r_amendments", {}),
         "r_missing": verdict.get("r_missing", []),
         "turns": turns_trace,
     }
@@ -259,6 +261,7 @@ def run_agent(
     tool_call_count = 0
     turn = 0
     r_verdicts: dict[str, dict[str, str]] = {}
+    r_verdict_history: dict[str, list[dict[str, Any]]] = {}
     per_turn_usage: list[dict[str, int]] = []
     all_turns_trace: list[dict] = []
     total_input = 0
@@ -332,30 +335,55 @@ def run_agent(
 
             if block.name == "submit_verdict_for_R":
                 r_id = block.input.get("r_id", "?")
-                r_verdicts[r_id] = {
+                prior_verdict = r_verdicts.get(r_id)
+                is_amendment = prior_verdict is not None
+                new_r_verdict: dict[str, Any] = {
                     "verdict": block.input.get("verdict", "UNKNOWN"),
                     "confidence": block.input.get("confidence", "UNKNOWN"),
                     "evidence": block.input.get("evidence", ""),
+                    "turn": turn,
+                    "amended": is_amendment,
                 }
+                history = r_verdict_history.setdefault(r_id, [])
+                if is_amendment:
+                    new_r_verdict["amendment"] = {
+                        "previous_verdict": prior_verdict.get("verdict", "UNKNOWN"),
+                        "previous_confidence": prior_verdict.get("confidence", "UNKNOWN"),
+                        "previous_evidence": prior_verdict.get("evidence", ""),
+                        "amendment_turn": turn,
+                        "reason": block.input.get("evidence", ""),
+                    }
+                history.append(dict(new_r_verdict))
+                new_r_verdict["amendment_count"] = max(0, len(history) - 1)
+                new_r_verdict["versions"] = [dict(v) for v in history]
+                r_verdicts[r_id] = new_r_verdict
                 remaining = [r for r in required_ids if r not in r_verdicts]
+                verb = "Amended" if is_amendment else "Recorded"
                 if remaining:
                     ack = (
-                        f"Recorded {r_id} verdict: {r_verdicts[r_id]['verdict']} "
+                        f"{verb} {r_id} verdict: {r_verdicts[r_id]['verdict']} "
                         f"(confidence={r_verdicts[r_id]['confidence']}). "
                         f"Remaining Required: {remaining}."
                     )
                 else:
                     turns_left = max_turns - turn
                     ack = (
-                        f"Recorded {r_id} verdict: {r_verdicts[r_id]['verdict']} "
+                        f"{verb} {r_id} verdict: {r_verdicts[r_id]['verdict']} "
                         f"(confidence={r_verdicts[r_id]['confidence']}). "
                         f"All Required Rs covered. "
                         f"You have {turns_left} turn(s) left for Open Exploration — "
                         f"probe for issues the spec did not enumerate, log with record_event. "
                         f"Call submit_verdict when done."
                     )
+                if is_amendment:
+                    ack += (
+                        f" This replaces prior {r_id} verdict "
+                        f"{prior_verdict.get('verdict', 'UNKNOWN')} "
+                        f"(confidence={prior_verdict.get('confidence', 'UNKNOWN')})."
+                    )
                 print(f"  ← {ack}")
                 trace_call["result"] = ack
+                trace_call["amended"] = is_amendment
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
@@ -483,6 +511,16 @@ def run_agent(
     verdict["eval_mode"] = "cover_all"
     verdict["required_ids"] = list(required_ids)
     verdict["r_verdicts"] = dict(r_verdicts)
+    verdict["r_verdict_history"] = {r_id: list(history) for r_id, history in r_verdict_history.items()}
+    verdict["r_amendments"] = {
+        r_id: {
+            "amendment_count": max(0, len(history) - 1),
+            "latest": history[-1] if history else {},
+            "history": history,
+        }
+        for r_id, history in r_verdict_history.items()
+        if len(history) > 1
+    }
     verdict["r_missing"] = [r for r in required_ids if r not in r_verdicts]
 
     repro_meta["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
@@ -520,6 +558,7 @@ def run_agent(
                 "usage": verdict["usage"],
                 "required_ids": list(required_ids),
                 "r_verdicts": dict(r_verdicts),
+                "r_amendments": verdict["r_amendments"],
                 "r_missing": verdict["r_missing"],
                 "exploratory_findings_count": len(verdict["exploratory_findings"]),
                 "repro": repro_meta,
