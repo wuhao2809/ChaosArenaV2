@@ -30,17 +30,15 @@ Thirteen tools are exposed to Claude:
       executes, then optionally continue monitoring for a short post-action
       window. Use for transient invariant violations.
   - record_event(event_type, detail): write a forensic event to the audit log
-  - set_R_context(r_ids, reason): set the persistent Required-R context that
-      subsequent probe calls are charged to until changed.
   - remember_fact(key, value, note): pin a reusable fact into compact memory
   - submit_verdict_for_R(r_id, verdict, confidence, evidence): per-R structured
       verdict. Agent must call this for each Required category in cover_all
       mode before submit_verdict is accepted.
   - submit_verdict(verdict, reasoning): overall verdict; ends the run.
 
-set_R_context, remember_fact, submit_verdict_for_R, and submit_verdict are
-handled specially by the runner (see runner.py); they have schema entries here
-but no dispatch functions — the runner intercepts them.
+remember_fact, submit_verdict_for_R, and submit_verdict are handled specially
+by the batch executor (see batch_executor.py); they have schema entries here
+but no dispatch functions — the executor intercepts them.
 """
 
 import os
@@ -603,32 +601,6 @@ TOOL_SCHEMAS: list[dict] = [
         },
     },
     {
-        "name": "set_R_context",
-        "description": (
-            "Set the persistent Required-R context for subsequent probe tools. "
-            "Use this before probe calls after the first discovery turn. Budget "
-            "for each probe turn is charged fractionally across the active r_ids "
-            "until this context is changed."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "r_ids": {
-                    "type": "array",
-                    "items": {"type": "string", "pattern": r"^R\d+$"},
-                    "minItems": 1,
-                    "maxItems": 6,
-                    "description": "Required R ids the next probe calls support, e.g. ['R5'] or ['R5','R8'].",
-                },
-                "reason": {
-                    "type": "string",
-                    "description": "One concise sentence explaining what this R context is testing.",
-                },
-            },
-            "required": ["r_ids", "reason"],
-        },
-    },
-    {
         "name": "remember_fact",
         "description": (
             "Pin a small reusable fact into compact run memory. Use this when "
@@ -1090,13 +1062,14 @@ def barrier_concurrent(
 
 
 def _do_request(request: dict, target: str) -> dict[str, Any]:
-    """Execute a single request from a {method, path, body?, headers?} dict."""
+    """Execute a single request from a {method, path|url, body?, headers?} dict."""
     return http_call(
         method=request["method"],
-        path=request["path"],
+        path=request.get("path"),
         target=target,
         body=request.get("body"),
         headers=request.get("headers"),
+        url=request.get("url"),
     )
 
 
@@ -1309,7 +1282,20 @@ def record_event(event_type: str, detail: str) -> dict[str, Any]:
 
 
 def dispatch_tool(name: str, input_args: dict, target: str) -> dict[str, Any]:
-    """Route a tool call to its implementation. Memory/verdict tools are handled by runner."""
+    """Route a tool call to its implementation. Memory/verdict tools are handled by runner.
+
+    Returns a structured error dict (never raises) so the agent can read the error and
+    self-correct rather than crashing the whole executor loop.
+    """
+    try:
+        return _dispatch_tool_inner(name, input_args, target)
+    except KeyError as exc:
+        return {"error": f"missing required argument {exc} for tool '{name}'", "tool": name, "received": input_args}
+    except (TypeError, ValueError) as exc:
+        return {"error": str(exc), "tool": name, "received": input_args}
+
+
+def _dispatch_tool_inner(name: str, input_args: dict, target: str) -> dict[str, Any]:
     if name == "http_call":
         return http_call(
             method=input_args["method"],
@@ -1386,4 +1372,4 @@ def dispatch_tool(name: str, input_args: dict, target: str) -> dict[str, Any]:
             event_type=input_args["event_type"],
             detail=input_args["detail"],
         )
-    raise ValueError(f"Unknown tool: {name}")
+    raise ValueError(f"unknown tool: {name}")

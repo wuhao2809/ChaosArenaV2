@@ -29,7 +29,7 @@ from config.config import (
     BEDROCK_PRICING_VERSION, INPUT_COST_PER_MTOK, OUTPUT_COST_PER_MTOK,
     CACHE_CREATION_PER_MTOK, CACHE_READ_PER_MTOK,
     CATEGORY_TURN_COST, PRIORITY_ORDER,
-    DEFAULT_R_ESTIMATED_TURNS, MIN_R_ESTIMATED_TURNS, MAX_R_ESTIMATED_TURNS,
+    DEFAULT_R_ESTIMATED_TURNS,
 )
 
 
@@ -135,12 +135,10 @@ def _validate_spec_json(payload: dict) -> dict:
 
 
 def _coerce_estimated_turns(value: object, default: int = DEFAULT_R_ESTIMATED_TURNS) -> int:
-    """Return a conservative per-R turn estimate bounded for runner enforcement."""
     try:
-        estimate = int(value) if value is not None else int(default)
+        return int(value) if value is not None else int(default)
     except (TypeError, ValueError):
-        estimate = int(default)
-    return max(MIN_R_ESTIMATED_TURNS, min(MAX_R_ESTIMATED_TURNS, estimate))
+        return int(default)
 
 
 def _render_markdown(spec: dict) -> str:
@@ -358,7 +356,7 @@ def draft_spec(
     Raises on validation failure.
     """
     here = Path(__file__).resolve().parent
-    sp_path = system_prompt_path or (here / "system_prompt_drafter.txt")
+    sp_path = system_prompt_path or (here / "prompts" / "spec_drafter_system.txt")
     if not sp_path.exists():
         raise FileNotFoundError(f"Drafter system prompt not found: {sp_path}")
     system_prompt = sp_path.read_text()

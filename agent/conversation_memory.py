@@ -160,16 +160,12 @@ class Memory:
         turn: int,
         max_turns: int,
         remaining_r_ids: list[str],
-        r_budget_state: dict[str, dict[str, Any]],
-        current_r_context: list[str] | None = None,
     ) -> None:
         """Refresh the compact runtime budget shown in active memory."""
         self._budget_context = {
             "turn": turn,
             "max_turns": max_turns,
             "remaining_r_ids": list(remaining_r_ids),
-            "r_budget_state": deepcopy(r_budget_state),
-            "current_r_context": list(current_r_context or []),
         }
         self._rebuild_active_messages()
 
@@ -243,30 +239,15 @@ class Memory:
         turn = context.get("turn", "?")
         max_turns = context.get("max_turns", "?")
         remaining = context.get("remaining_r_ids", [])
-        budget_state = context.get("r_budget_state", {})
-        current_r_context = context.get("current_r_context", [])
 
         lines = [
-            "=== ACTIVE R BUDGET STATUS ===",
+            "=== TURN PROGRESS ===",
             f"Next turn: {turn}/{max_turns}.",
         ]
         if not remaining:
             lines.append("Remaining Required Rs: none. Submit overall verdict after any brief Open Exploration.")
-            return lines
-
-        lines.append(f"Remaining Required Rs: {', '.join(remaining)}.")
-        if current_r_context:
-            lines.append(f"Current R context: {', '.join(current_r_context)}.")
         else:
-            lines.append("Current R context: none. Call set_R_context before Required-R probes after turn 1.")
-        lines.append("Budget by remaining R (used / estimated turns):")
-        for r_id in remaining:
-            state = budget_state.get(r_id, {})
-            used = float(state.get("used_turns", 0.0) or 0.0)
-            estimated = int(state.get("estimated_turns", 0) or 0)
-            pressure = "over estimate" if estimated and used >= estimated else "ok"
-            lines.append(f"- {r_id}: {used:.2f} / {estimated} ({pressure})")
-        lines.append("Required-R probe tools after turn 1 require an active set_R_context.")
+            lines.append(f"Remaining Required Rs: {', '.join(remaining)}.")
         return lines
 
     def _build_r_archive(

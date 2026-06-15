@@ -19,11 +19,11 @@ Usage examples:
                  --target http://localhost:8080 \\
                  --run-id default_baseline_001
 
-  # Run from a large spec using pseudo multi-agent executor batches:
+  # Run from a large spec using LLM orchestrator + executor batches:
   python main.py --spec ../specs/new_memory_album_test_overall_spec.md \\
                  --target http://localhost:8080 \\
-                 --run-id album_pseudo_001 \\
-                 --pseudo-multi-agent
+                 --run-id album_multi_001 \\
+                 --multi-agent
 
   # Draft only (no evaluation):
   python main.py --nl-input ../nl_specs/album_store.txt \\
@@ -38,8 +38,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from config.config import DEFAULT_MAX_TURNS
-from pseudo_multi_agent import run_pseudo_multi_agent
-from runner import run_agent
+from batch_executor import run_agent
+from orchestration_runner import run_orchestrated_evaluation
 from spec_drafter import draft_spec
 
 
@@ -147,6 +147,26 @@ def _write_verdict_report(result: dict, drafter_usage: dict | None, path: Path) 
             f"- Pricing version: {usage.get('pricing_version', '?')}",
             "",
         ])
+        coordinator_usage = usage.get("coordinator") or []
+        per_batch_usage = usage.get("per_batch") or []
+        if coordinator_usage or per_batch_usage:
+            lines.extend(["### Multi-Agent Cost Breakdown", ""])
+            for item in coordinator_usage:
+                lines.append(
+                    f"- Coordinator `{item.get('phase', '?')}`: "
+                    f"in={item.get('input_tokens', 0):,}, "
+                    f"out={item.get('output_tokens', 0):,}, "
+                    f"cost=${item.get('cost_usd', 0.0):.6f}"
+                )
+            for item in per_batch_usage:
+                batch_usage = item.get("usage") or {}
+                lines.append(
+                    f"- Executor `{item.get('batch', '?')}` ({', '.join(item.get('r_ids', []))}): "
+                    f"in={batch_usage.get('input_tokens', 0):,}, "
+                    f"out={batch_usage.get('output_tokens', 0):,}, "
+                    f"cost=${batch_usage.get('cost_usd', 0.0):.6f}"
+                )
+            lines.append("")
 
     repro = result.get("repro") or {}
     if repro:
@@ -227,6 +247,14 @@ def _print_verdict(result: dict, drafter_usage: dict | None, paths: dict[str, Pa
             f"[usage] total:   ${total_cost:.4f}  "
             f"(pricing {agent_usage['pricing_version']})"
         )
+        coordinator_usage = agent_usage.get("coordinator") or []
+        per_batch_usage = agent_usage.get("per_batch") or []
+        if coordinator_usage:
+            coord_cost = sum(float(item.get("cost_usd", 0.0)) for item in coordinator_usage)
+            print(f"[usage] coordinator: calls={len(coordinator_usage)} cost=${coord_cost:.4f}")
+        if per_batch_usage:
+            executor_cost = sum(float((item.get("usage") or {}).get("cost_usd", 0.0)) for item in per_batch_usage)
+            print(f"[usage] executors:   batches={len(per_batch_usage)} cost=${executor_cost:.4f}")
 
     repro = result.get("repro")
     if repro:
@@ -300,7 +328,7 @@ def main() -> int:
     parser.add_argument(
         "--system-prompt",
         default=None,
-        help="Path to system prompt file (default: system_prompt.txt next to main.py).",
+        help="Path to batch executor system prompt file (default: prompts/batch_executor_system.txt).",
     )
     parser.add_argument(
         "--no-interactive",
@@ -309,11 +337,11 @@ def main() -> int:
              "Useful for CI / scripting.",
     )
     parser.add_argument(
-        "--pseudo-multi-agent",
+        "--multi-agent",
         action="store_true",
         help=(
-            "Split Required Rs into small executor batches, run the existing "
-            "agent once per batch, then aggregate per-R verdicts."
+            "Use an LLM Coordinator/Judge to plan executor batches and repairs, "
+            "run the existing agent once per batch, then aggregate per-R verdicts."
         ),
     )
 
@@ -379,7 +407,7 @@ def main() -> int:
     # ------------------------------------------------------------------
     prompt_path = (
         Path(args.system_prompt) if args.system_prompt
-        else script_dir / "system_prompt.txt"
+        else script_dir / "prompts" / "batch_executor_system.txt"
     )
     if not prompt_path.exists():
         print(f"[error] system prompt not found: {prompt_path}", file=sys.stderr)
@@ -404,8 +432,8 @@ def main() -> int:
     for p in (paths["trace"], paths["messages"]):
         p.parent.mkdir(parents=True, exist_ok=True)
 
-    if args.pseudo_multi_agent:
-        result = run_pseudo_multi_agent(
+    if args.multi_agent:
+        result = run_orchestrated_evaluation(
             system_prompt=system_prompt,
             spec=spec,
             target=args.target.rstrip("/"),
