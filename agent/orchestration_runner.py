@@ -350,6 +350,65 @@ def _plan_repair_batch_with_coordinator(
     return _batch_from_ids(index=repair_index, r_ids=ids, parsed_spec=parsed_spec), usage
 
 
+_EXPLORATION_SYSTEM = """\
+You are ChaosArena in Open Exploration mode.
+
+All Required acceptance criteria for this service have already been verified by \
+specialized executor agents. You have NO Required Rs to cover — jump directly to \
+Open Exploration.
+
+Your goal: discover bugs, edge cases, and vulnerabilities that the spec did not enumerate.
+
+Focus on:
+- Authorization / ownership boundaries (can one user access another's data?)
+- Input validation edges (empty strings, Unicode, very large/negative numbers, malformed JSON)
+- Idempotency (does a repeated PUT/POST produce duplicate records or diverge?)
+- Error-code semantics (500 where 4xx expected, missing 404s, wrong error bodies)
+- Schema-shape stability (are response fields consistent across calls?)
+- Concurrency edge cases not covered by Required Rs
+
+Report every finding with `record_event`. Always supply the `title` field — a short \
+headline (≤10 words) that lets a reader scan the report at a glance:
+- OBSERVATION — notable but inconclusive (e.g. "Spec expected value differs from actual")
+- WARNING — suspicious behavior that needs human review (e.g. "Negative side length returns 200")
+- VIOLATION — definite breach not covered by any Required R (e.g. "Fisher NaN serialized as JSON string")
+
+Call `submit_verdict` when you have found 3–5 substantive findings or your turn \
+budget is nearly spent. Do not start new probes once fewer than 2 turns remain.
+"""
+
+
+def _exploration_executor_prompt(
+    run_id: str,
+    r_verdicts_summary: str,
+    discovery_context: str,
+) -> str:
+    """Build the system prompt for the dedicated exploration executor."""
+    api_ctx = (
+        f"\n\n# API CONTEXT (pre-run discovery)\n\n{discovery_context.strip()}\n"
+        if discovery_context.strip() else ""
+    )
+    r_summary = (
+        f"\n\n# ALREADY VERIFIED (do not re-test these)\n\n{r_verdicts_summary.strip()}\n"
+        if r_verdicts_summary.strip() else ""
+    )
+    return _EXPLORATION_SYSTEM + api_ctx + r_summary + f"\n\n# RUN ID\n\n{run_id}\n"
+
+
+def _format_exploration_spec(original_spec: str) -> str:
+    """Strip Required Test Categories from the spec so the exploration agent has no Rs to cover."""
+    marker = "## Required Test Categories"
+    idx = original_spec.find(marker)
+    if idx == -1:
+        return original_spec
+    prefix = original_spec[:idx].rstrip()
+    oe_marker = "## Open Exploration"
+    oe_idx = original_spec.find(oe_marker, idx)
+    if oe_idx != -1:
+        return prefix + "\n\n" + original_spec[oe_idx:]
+    return prefix
+
+
 def _section_prefix(original_spec: str) -> str:
     marker = "## Required Test Categories"
     idx = original_spec.find(marker)
@@ -426,7 +485,6 @@ def _run_one_batch(
     target: str,
     discovery_context: str,
     max_turns: int,
-    dump_messages_to: "Path | None",
 ) -> dict[str, Any]:
     """Run one executor batch in a worker thread."""
     batch_run_id = f"{run_id}__{batch.label}"
@@ -434,17 +492,13 @@ def _run_one_batch(
     batch_max_turns = _batch_max_turns(batch, max_turns)
     batch_spec = _format_batch_spec(spec, parsed_spec, batch)
     batch_prompt = _executor_prompt(system_prompt, run_id, batch, discovery_context)
-    batch_memory_path = (
-        dump_messages_to.with_name(f"run_{batch_run_id}_messages{dump_messages_to.suffix}")
-        if dump_messages_to is not None else None
-    )
     print(f"\n{'='*72}\n[executor:{batch.label}] Rs={batch.ids} max_turns={batch_max_turns}\n{'='*72}")
     started_at = datetime.now(timezone.utc).isoformat()
     result = run_agent(
         system_prompt=batch_prompt,
         spec=batch_spec,
         target=target,
-        dump_messages_to=batch_memory_path,
+        dump_messages_to=None,
         max_turns=batch_max_turns,
         run_id_override=batch_run_id,
         auto_submit_on_r_coverage=True,
@@ -659,6 +713,7 @@ def _judge_aggregate(
         "turns": total_turns,
         "eval_mode": "orchestrated_cover_all",
         "required_ids": required_ids,
+        "r_titles": {r.r_id: r.title for r in parsed_spec.required},
         "r_verdicts": r_verdicts,
         "r_verdict_history": r_verdict_history,
         "r_amendments": r_amendments,
@@ -773,7 +828,7 @@ def run_orchestrated_evaluation(
             pool.submit(
                 _run_one_batch,
                 batch, run_id, system_prompt, spec, parsed_spec,
-                target, discovery_context, max_turns, dump_messages_to,
+                target, discovery_context, max_turns,
             ): batch
             for batch in batches
         }
@@ -828,13 +883,6 @@ def run_orchestrated_evaluation(
         batch_max_turns = _batch_max_turns(repair_batch, max_turns, remaining_turns, is_repair=True)
         batch_spec = _format_batch_spec(spec, parsed_spec, repair_batch)
         batch_prompt = _executor_prompt(system_prompt, run_id, repair_batch, discovery_context)
-        if dump_messages_to is not None:
-            batch_memory_path = dump_messages_to.with_name(
-                f"run_{batch_run_id}_messages{dump_messages_to.suffix}"
-            )
-        else:
-            batch_memory_path = None
-
         print()
         print("=" * 72)
         print(
@@ -848,7 +896,7 @@ def run_orchestrated_evaluation(
             system_prompt=batch_prompt,
             spec=batch_spec,
             target=target,
-            dump_messages_to=batch_memory_path,
+            dump_messages_to=None,
             max_turns=batch_max_turns,
             run_id_override=batch_run_id,
             auto_submit_on_r_coverage=True,
@@ -866,6 +914,67 @@ def run_orchestrated_evaluation(
         cum_cost_usd += float(result.get("usage", {}).get("cost_usd", 0.0))
         print(f"[orchestrator] {repair_label} done  cum_cost=${cum_cost_usd:.4f}  turns_used={executor_turns_used}/{max_turns}")
         repair_index += 1
+
+    # --- Dedicated exploration phase ---
+    # Only runs when ALL Required Rs are covered and budget remains.
+    covered_final = {
+        r_id
+        for item in batch_results
+        for r_id in (item.get("result", {}).get("r_verdicts") or {}).keys()
+    }
+    all_rs_covered = all(r in covered_final for r in parsed_spec.required_ids)
+    remaining_for_exploration = max_turns - executor_turns_used
+
+    if all_rs_covered and remaining_for_exploration >= MIN_VIABLE_BATCH_TURNS:
+        # Build a compact summary of what was already verified for the exploration agent.
+        all_r_verdicts: dict[str, Any] = {}
+        for item in batch_results:
+            all_r_verdicts.update(item.get("result", {}).get("r_verdicts") or {})
+        r_verdicts_summary = "\n".join(
+            f"- {r_id}: {v.get('verdict', '?')} — {v.get('evidence', '')[:120]}"
+            for r_id, v in sorted(all_r_verdicts.items())
+        )
+
+        exploration_run_id = f"{run_id}__exploration"
+        exploration_prompt = _exploration_executor_prompt(
+            run_id=run_id,
+            r_verdicts_summary=r_verdicts_summary,
+            discovery_context=discovery_context,
+        )
+        exploration_spec = _format_exploration_spec(spec)
+
+        print()
+        print("=" * 72)
+        print(f"[orchestrator] exploration agent: remaining_turns={remaining_for_exploration}")
+        print("=" * 72)
+
+        started_at = datetime.now(timezone.utc).isoformat()
+        exploration_result = run_agent(
+            system_prompt=exploration_prompt,
+            spec=exploration_spec,
+            target=target,
+            dump_messages_to=None,
+            max_turns=remaining_for_exploration,
+            run_id_override=exploration_run_id,
+            auto_submit_on_r_coverage=False,
+            write_trace=False,
+            executor_label="exploration",
+        )
+        executor_turns_used += int(exploration_result.get("turns", 0))
+        batch_results.append({
+            "batch_label": "exploration",
+            "r_ids": [],
+            "max_turns": remaining_for_exploration,
+            "started_at_utc": started_at,
+            "result": exploration_result,
+        })
+        cum_cost_usd += float(exploration_result.get("usage", {}).get("cost_usd", 0.0))
+        print(f"[orchestrator] exploration done  cum_cost=${cum_cost_usd:.4f}  turns_used={executor_turns_used}/{max_turns}")
+    elif parsed_spec.required_ids and not all_rs_covered:
+        missing_exp = [r for r in parsed_spec.required_ids if r not in covered_final]
+        print(f"[orchestrator] skipping exploration — {len(missing_exp)} Rs still uncovered: {missing_exp}")
+    else:
+        print(f"[orchestrator] skipping exploration — only {remaining_for_exploration} turn(s) remaining")
 
     aggregate = _judge_aggregate(
         original_spec=spec,

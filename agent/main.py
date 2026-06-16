@@ -80,27 +80,31 @@ def _write_verdict_report(result: dict, drafter_usage: dict | None, path: Path) 
         "",
         result.get("reasoning", "").strip() or "(no reasoning provided)",
         "",
-        "## Required Categories",
-        "",
     ]
 
     r_verdicts = result.get("r_verdicts") or {}
+    r_titles = result.get("r_titles") or {}
     required_ids = result.get("required_ids") or []
+
+    lines.extend(["## Required Categories", ""])
+
     if required_ids:
         for r_id in required_ids:
             r = r_verdicts.get(r_id)
+            title = r_titles.get(r_id, "")
+            title_suffix = f": {title}" if title else ""
             if r:
                 amendment_suffix = ""
                 if r.get("amended"):
                     amendment_suffix = f", amended {r.get('amendment_count', 1)}x"
                 lines.extend([
-                    f"### {r_id}: {r.get('verdict', 'UNKNOWN')} ({r.get('confidence', 'UNKNOWN')}{amendment_suffix})",
+                    f"### {r_id}{title_suffix} — {r.get('verdict', 'UNKNOWN')} ({r.get('confidence', 'UNKNOWN')}{amendment_suffix})",
                     "",
                     r.get("evidence", "").strip() or "(no evidence provided)",
                     "",
                 ])
             else:
-                lines.extend([f"### {r_id}: Missing verdict", ""])
+                lines.extend([f"### {r_id}{title_suffix} — Missing verdict", ""])
     else:
         lines.extend(["No Required categories were parsed.", ""])
 
@@ -108,7 +112,8 @@ def _write_verdict_report(result: dict, drafter_usage: dict | None, path: Path) 
     if amendments:
         lines.extend(["## Verdict Amendments", ""])
         for r_id, item in amendments.items():
-            lines.append(f"### {r_id}")
+            title = r_titles.get(r_id, "")
+            lines.append(f"### {r_id}{': ' + title if title else ''}")
             lines.append("")
             for i, version in enumerate(item.get("history", []), start=1):
                 label = "initial" if i == 1 else f"amendment {i - 1}"
@@ -122,9 +127,13 @@ def _write_verdict_report(result: dict, drafter_usage: dict | None, path: Path) 
     lines.extend(["## Exploratory Findings", ""])
     if findings:
         for i, finding in enumerate(findings, start=1):
-            lines.append(
-                f"{i}. **{finding.get('event_type', 'NOTE')}**: {finding.get('detail', '')}"
-            )
+            event_type = finding.get("event_type", "NOTE")
+            title = finding.get("title", "")
+            detail = finding.get("detail", "")
+            if title:
+                lines.append(f"{i}. **{event_type} — {title}**: {detail}")
+            else:
+                lines.append(f"{i}. **{event_type}**: {detail}")
         lines.append("")
     else:
         lines.extend(["No exploratory findings recorded.", ""])
@@ -201,15 +210,18 @@ def _print_verdict(result: dict, drafter_usage: dict | None, paths: dict[str, Pa
     )
 
     rs = result.get("r_verdicts") or {}
+    titles = result.get("r_titles") or {}
     if rs:
         print(f"[per-R] {len(rs)} of {len(result.get('required_ids', []))} Rs covered:")
         for r_id in result.get("required_ids", []):
             r = rs.get(r_id)
+            title = titles.get(r_id, "")
+            label = f"{r_id}: {title}" if title else r_id
             if r:
                 amended = f", amended {r.get('amendment_count', 1)}x" if r.get("amended") else ""
-                print(f"   {r_id}: {r['verdict']:<11} (conf={r['confidence']}{amended})")
+                print(f"   {label}: {r['verdict']:<11} (conf={r['confidence']}{amended})")
             else:
-                print(f"   {r_id}: (no verdict)")
+                print(f"   {label}: (no verdict)")
 
     amendments = result.get("r_amendments") or {}
     if amendments:

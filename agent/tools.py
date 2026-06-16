@@ -596,6 +596,14 @@ TOOL_SCHEMAS: list[dict] = [
                     "type": "string",
                     "description": "Free-form description (be specific about what was observed).",
                 },
+                "title": {
+                    "type": "string",
+                    "description": (
+                        "Short headline for this finding (≤10 words). "
+                        "Example: 'Fisher returns NaN as JSON string'. "
+                        "Shown as the scannable summary line in the report."
+                    ),
+                },
             },
             "required": ["event_type", "detail"],
         },
@@ -1270,13 +1278,15 @@ def monitor_while(
     }
 
 
-def record_event(event_type: str, detail: str) -> dict[str, Any]:
+def record_event(event_type: str, detail: str, title: str = "") -> dict[str, Any]:
     """Append a forensic event to the run's audit log."""
     event = {
         "event_type": event_type,
         "detail": detail,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+    if title:
+        event["title"] = title
     EVENT_LOG.append(event)
     return {"recorded": True, "event_id": len(EVENT_LOG)}
 
@@ -1371,5 +1381,6 @@ def _dispatch_tool_inner(name: str, input_args: dict, target: str) -> dict[str, 
         return record_event(
             event_type=input_args["event_type"],
             detail=input_args["detail"],
+            title=input_args.get("title", ""),
         )
     raise ValueError(f"unknown tool: {name}")

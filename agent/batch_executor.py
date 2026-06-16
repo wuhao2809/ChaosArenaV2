@@ -555,6 +555,7 @@ def run_agent(
 
     verdict["eval_mode"] = "cover_all"
     verdict["required_ids"] = list(required_ids)
+    verdict["r_titles"] = {r.r_id: r.title for r in parsed_spec.required}
     verdict["r_verdicts"] = dict(r_verdicts)
     verdict["r_verdict_history"] = {r_id: list(history) for r_id, history in r_verdict_history.items()}
     verdict["r_amendments"] = {
