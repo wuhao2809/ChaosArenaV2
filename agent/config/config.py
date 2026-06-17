@@ -6,25 +6,22 @@ so there is a single place to adjust values.
 
 # ── Agent runtime ──────────────────────────────────────────────────────────
 DEFAULT_MAX_TURNS = 60          # default turn budget per evaluation run
-MAX_TOKENS = 8192               # max output tokens per Bedrock/API call
+MAX_TOKENS = 8192               # max output tokens per LLM call
 TEMPERATURE = 0.0               # lock sampling for reproducibility
-TOP_P_RECORDED = 1.0            # not sent to Bedrock; recorded for provenance
-TOP_K_RECORDED = 1              # not sent to Bedrock; recorded for provenance
+TOP_P_RECORDED = 1.0            # not sent to LLM; recorded for provenance
+TOP_K_RECORDED = 1              # not sent to LLM; recorded for provenance
 DEFAULT_R_ESTIMATED_TURNS = 3     # fallback when a hand-written spec omits per-R budget metadata
 
 # ── Model IDs ──────────────────────────────────────────────────────────────
-# Bedrock requires a cross-region inference profile, not the base model ID.
-# Find yours with:
-#   aws bedrock list-inference-profiles --region us-west-2 \
-#     --query "inferenceProfileSummaries[?contains(inferenceProfileId,'sonnet-4-6')].inferenceProfileId" \
-#     --output table
+# Override with MODEL_ID env var at runtime.
+# LLM_BACKEND=bedrock  → uses DEFAULT_BEDROCK_MODEL (cross-region inference profile)
+# LLM_BACKEND=direct   → uses DEFAULT_DIRECT_MODEL  (direct API model name)
 DEFAULT_BEDROCK_MODEL = "us.anthropic.claude-sonnet-4-6"
 DEFAULT_DIRECT_MODEL = "claude-sonnet-4-6"
 
-# ── Bedrock Sonnet 4.6 pricing (2026-Q2) ──────────────────────────────────
-# Source: https://aws.amazon.com/bedrock/pricing/
-# Update BEDROCK_PRICING_VERSION whenever these change.
-BEDROCK_PRICING_VERSION = "2026-Q2"
+# ── LLM pricing (2026-Q2, Sonnet 4.6) ─────────────────────────────────────
+# Update PRICING_VERSION whenever these change.
+PRICING_VERSION = "2026-Q2"
 INPUT_COST_PER_MTOK = 3.00          # $/1M input tokens
 OUTPUT_COST_PER_MTOK = 15.00        # $/1M output tokens
 CACHE_CREATION_PER_MTOK = 3.75      # $/1M cache-write tokens
@@ -32,7 +29,7 @@ CACHE_READ_PER_MTOK = 0.30          # $/1M cache-read tokens
 
 # ── Spec drafter ───────────────────────────────────────────────────────────
 DRAFTER_TEMPERATURE = 0.0
-DRAFTER_MAX_TOKENS = 16384   # thinking + JSON; Sonnet 4.6 thinking can use 8K+ tokens alone
+DRAFTER_MAX_TOKENS = 16384   # thinking + JSON; extended thinking can use 8K+ tokens alone
 
 # ── Interactive trim (spec_drafter) ───────────────────────────────────────
 # Rough turn cost per R-category used in the budget table shown to the TA.

@@ -226,6 +226,11 @@ fence) matching this schema:
 {
   "service_name": <short identifier inferred from description>,
   "description": <one-paragraph restatement of the input>,
+  "authentication_notes": <one paragraph describing how to authenticate:
+                           which endpoint to call, what credentials to pass,
+                           whether the response sets a cookie or returns a token,
+                           and the exact header/cookie format to use on subsequent
+                           requests. If no auth exists, write "No authentication required.">,
   "race_conditions":  TestCases | NA,
   "async_invariants": TestCases | NA,
   "auth_boundaries":  TestCases | NA,

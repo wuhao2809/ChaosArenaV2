@@ -1,16 +1,15 @@
 """Spec drafter: natural-language description → structured markdown spec.
 
-One Bedrock Claude call. Prompt design follows lit_scan_round6_prompt_eng.md:
-- Anthropic XML tags (verified: Anthropic engineering blog Dec 2024)
-- Multi-stage structured chain-of-thought (verified: Ryan et al. 2024
+One LLM call. Prompt design follows lit_scan_round6_prompt_eng.md:
+- XML-structured prompting with explicit role and output schema
+- Multi-stage structured chain-of-thought (Ryan et al. 2024
   SymPrompt arXiv 2402.00097; Yao 2023 ToT arXiv 2305.10601)
 - Hard-coded 4-category taxonomy injection — race / async / auth / edge
   (justified: Tambon et al. 2024 arXiv 2403.08937 shows generic LLM-bug
   taxonomies omit concurrency)
 - JSON-schema-shaped output, validated then rendered to markdown
-  (verified: Willard & Louf 2023 Outlines arXiv 2307.09702)
-- Self-review pass (verified: Anthropic "Building Effective Agents"
-  evaluator-optimizer pattern Dec 2024)
+  (Willard & Louf 2023 Outlines arXiv 2307.09702)
+- Self-review pass (evaluator-optimizer pattern)
 
 Ground-truth verification of spec quality is the agent's downstream job;
 this module only produces a candidate the TA reviews before running.
@@ -26,7 +25,7 @@ from anthropic import Anthropic, AnthropicBedrock
 from config.config import (
     DEFAULT_MAX_TURNS, DRAFTER_TEMPERATURE, DRAFTER_MAX_TOKENS,
     DEFAULT_BEDROCK_MODEL, DEFAULT_DIRECT_MODEL,
-    BEDROCK_PRICING_VERSION, INPUT_COST_PER_MTOK, OUTPUT_COST_PER_MTOK,
+    PRICING_VERSION, INPUT_COST_PER_MTOK, OUTPUT_COST_PER_MTOK,
     CACHE_CREATION_PER_MTOK, CACHE_READ_PER_MTOK,
     CATEGORY_TURN_COST, PRIORITY_ORDER,
     DEFAULT_R_ESTIMATED_TURNS,
@@ -102,6 +101,7 @@ def _validate_spec_json(payload: dict) -> dict:
         "auth_boundaries",
         "edge_cases",
         "open_exploration_hint",
+        # authentication_notes is optional for backwards-compat with hand-written specs
     }
     missing = required_top - set(payload.keys())
     if missing:
@@ -162,6 +162,14 @@ def _render_markdown(spec: dict) -> str:
         "before running an evaluation.*"
     )
     lines.append("")
+
+    auth_notes = (spec.get("authentication_notes") or "").strip()
+    if auth_notes and auth_notes.lower() != "no authentication required.":
+        lines.append("## Authentication")
+        lines.append("")
+        lines.append(auth_notes)
+        lines.append("")
+
     lines.append("## Required Test Categories")
     lines.append("")
 
@@ -350,7 +358,7 @@ def draft_spec(
     system_prompt_path: Path | None = None,
     interactive: bool = True,
 ) -> tuple[str, dict, dict]:
-    """Run one Bedrock call to draft a spec from natural language.
+    """Draft a spec from natural language using one LLM call.
 
     Returns (markdown_text, raw_json_dict, drafter_usage_dict).
     Raises on validation failure.
@@ -419,7 +427,7 @@ def draft_spec(
             + cache_read * CACHE_READ_PER_MTOK / 1_000_000,
             6,
         ),
-        "pricing_version": BEDROCK_PRICING_VERSION,
+        "pricing_version": PRICING_VERSION,
     }
     return markdown, spec_json, drafter_usage
 

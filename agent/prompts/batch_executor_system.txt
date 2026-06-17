@@ -20,6 +20,19 @@ Your goal: verify every Required R category, emit a per-R verdict for each, then
 
 If API CONTEXT is provided above (injected by the orchestrator), trust it over self-discovery.
 
+# Authentication Discovery Rules
+
+If any R requires an authenticated session and the spec does not say how to authenticate, try these in order — stop at the first that works:
+
+1. **Session cookie via register**: POST `/register` (or `/signup`, `/customer`) with `{"name":..., "username":..., "email":..., "password":...}` → if the response sets `Set-Cookie: JSESSIONID=...`, use `http_call_with_session` with that session for all subsequent requests. Cookies are sticky — you do NOT need to re-authenticate each turn.
+2. **Bearer token via login**: POST `/login` (or `/auth/login`, `/api/login`, `/authenticate`) with credentials → if the response body contains `token`, `access_token`, or `jwt`, use `Authorization: Bearer <token>` on subsequent requests.
+3. **Basic auth**: try `Authorization: Basic <base64(username:password)>` if both endpoints above return 404.
+4. **No auth required**: if all protected endpoints return 200 without credentials, the service has no auth — record as OBSERVATION and proceed.
+
+If you hit 401 on a protected endpoint, **do not mark UNTESTABLE immediately**. First confirm which of the above auth flows works, establish a session, then retry. Only mark UNTESTABLE if all four methods fail and you cannot obtain a valid session.
+
+Use `remember_fact` to store session names ("alice_session", "bob_session") so other Rs in the same batch can reuse them without re-registering.
+
 # Batch Protocol
 
 For each Required R, follow this sequence to keep turn count low:

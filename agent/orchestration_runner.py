@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from config.config import (
-    BEDROCK_PRICING_VERSION,
+    PRICING_VERSION,
     DEFAULT_MAX_TURNS,
     DEFAULT_R_ESTIMATED_TURNS,
     MAX_TOKENS,
@@ -71,8 +71,9 @@ def plan_r_batches(
     current: list[RequiredCategory] = []
     current_estimate = 0
 
+    MIN_R_ESTIMATED_TURNS = 3
     for r in parsed_spec.required:
-        estimate = int(getattr(r, "estimated_turns", DEFAULT_R_ESTIMATED_TURNS))
+        estimate = max(MIN_R_ESTIMATED_TURNS, int(getattr(r, "estimated_turns", DEFAULT_R_ESTIMATED_TURNS)))
         would_exceed = current and current_estimate + estimate > target_estimated_turns
         if would_exceed:
             batches.append(RBatch(index=len(batches) + 1, required=current))
@@ -98,7 +99,7 @@ def _required_summaries(parsed_spec: ParsedSpec) -> list[dict[str, Any]]:
         {
             "r_id": r.r_id,
             "title": r.title,
-            "estimated_turns": int(getattr(r, "estimated_turns", DEFAULT_R_ESTIMATED_TURNS)),
+            "estimated_turns": max(3, int(getattr(r, "estimated_turns", DEFAULT_R_ESTIMATED_TURNS))),
             "body": r.body.strip(),
         }
         for r in parsed_spec.required
@@ -557,6 +558,76 @@ Rules:
 """
 
 
+def _probe_auth(target: str) -> str:
+    """Probe the live service to discover its authentication mechanism.
+
+    Tries common auth patterns and returns a paragraph describing what works.
+    Never raises — returns empty string on complete failure.
+    """
+    from tools import dispatch_tool, SESSIONS
+    import uuid
+
+    suffix = uuid.uuid4().hex[:8]
+    username = f"probe_{suffix}"
+    email = f"{username}@chaos.test"
+    password = "Probe@1234!"
+    name = f"Probe {suffix}"
+
+    # Try 1: session-cookie via POST /register
+    for reg_path in ("/register", "/signup", "/customer", "/api/register", "/users"):
+        try:
+            body = {"name": name, "username": username, "email": email, "password": password}
+            r = dispatch_tool("http_call", {"method": "POST", "path": reg_path, "json_body": body}, target)
+            status = r.get("status", 0)
+            if status in (200, 201):
+                # Check if a session cookie was set via http_call_with_session
+                sess_id = f"auth_probe_{suffix}"
+                r2 = dispatch_tool("http_call_with_session", {
+                    "method": "POST", "path": reg_path,
+                    "json_body": {**body, "username": username + "2", "email": f"{username}2@chaos.test"},
+                    "session_id": sess_id,
+                }, target)
+                if sess_id in SESSIONS and SESSIONS[sess_id].cookies:
+                    cookie_names = list(SESSIONS[sess_id].cookies.keys())
+                    return (
+                        f"Authentication: POST {reg_path} with JSON body "
+                        f'{{\"name\": ..., \"username\": ..., \"email\": ..., \"password\": ...}} '
+                        f"returns HTTP {r2.get('status', '?')} and sets session cookies "
+                        f"({', '.join(cookie_names)}). "
+                        f"Use http_call_with_session with a session_id per user — cookies are sticky. "
+                        f"There is no separate /login endpoint. "
+                        f"To create two users, call POST {reg_path} twice with different credentials."
+                    )
+                elif status in (200, 201):
+                    body_text = str(r.get("body", ""))
+                    if any(k in body_text.lower() for k in ("token", "access_token", "jwt")):
+                        return (
+                            f"Authentication: POST {reg_path} with JSON credentials returns "
+                            f"HTTP {status} with a token in the response body. "
+                            f"Extract the token and send it as 'Authorization: Bearer <token>' on subsequent requests."
+                        )
+        except Exception:
+            continue
+
+    # Try 2: bearer token via POST /login or /auth/login
+    for login_path in ("/login", "/auth/login", "/api/login", "/authenticate", "/api/authenticate"):
+        try:
+            body = {"username": username, "password": password}
+            r = dispatch_tool("http_call", {"method": "POST", "path": login_path, "json_body": body}, target)
+            if r.get("status") in (200, 201):
+                body_text = str(r.get("body", ""))
+                if any(k in body_text.lower() for k in ("token", "access_token", "jwt")):
+                    return (
+                        f"Authentication: POST {login_path} with {{\"username\": ..., \"password\": ...}} "
+                        f"returns HTTP {r.get('status')} with a bearer token in the response body. "
+                        f"Use 'Authorization: Bearer <token>' on all subsequent protected requests."
+                    )
+        except Exception:
+            continue
+
+    return ""
+
+
 def _run_discovery_probe(target: str, spec: str) -> tuple[str, dict[str, Any]]:
     """Ask the LLM to infer the API surface from the spec, confirm the service is up.
 
@@ -570,6 +641,16 @@ def _run_discovery_probe(target: str, spec: str) -> tuple[str, dict[str, Any]]:
 
     health = dispatch_tool("http_call", {"method": "GET", "path": "/health"}, target)
     lines.append(f"Service health: GET /health → {health.get('status', '?')}")
+
+    # Probe auth mechanism before calling the LLM — result goes into discovery context
+    auth_info = _probe_auth(target)
+    if auth_info:
+        lines.append("")
+        lines.append(f"Authentication (live probe): {auth_info}")
+        print(f"[orchestrator] auth probe: {auth_info[:120]}...")
+    else:
+        lines.append("")
+        lines.append("Authentication (live probe): Could not determine auth mechanism — executors should try common patterns.")
 
     user_text = f"Health check result: {health}\n\nSpec:\n{spec}"
     result, usage = _coordinator_json_call("api_discovery", _DISCOVERY_SYSTEM, user_text)
@@ -611,7 +692,7 @@ def _merge_usage(
         "cache_creation_input_tokens": 0,
         "cache_read_input_tokens": 0,
         "cost_usd": 0.0,
-        "pricing_version": BEDROCK_PRICING_VERSION,
+        "pricing_version": PRICING_VERSION,
         "coordinator": [],
         "per_batch": [],
     }
@@ -659,6 +740,7 @@ def _judge_aggregate(
     events: list[dict[str, Any]] = []
     total_turns = 0
     total_tool_calls = 0
+    global_tool_counts: dict[str, int] = {}
 
     for item in batch_results:
         result = item["result"]
@@ -669,6 +751,8 @@ def _judge_aggregate(
         r_amendments.update(result.get("r_amendments") or {})
         exploratory_findings.extend(result.get("exploratory_findings") or [])
         events.extend(result.get("events") or [])
+        for tool, cnt in (result.get("tool_counts") or {}).items():
+            global_tool_counts[tool] = global_tool_counts.get(tool, 0) + cnt
 
     missing = [r_id for r_id in required_ids if r_id not in r_verdicts]
     failed = [
@@ -722,6 +806,7 @@ def _judge_aggregate(
         "exploratory_findings": exploratory_findings,
         "events": events,
         "usage": usage,
+        "tool_counts": dict(sorted(global_tool_counts.items(), key=lambda x: -x[1])),
         "orchestration": {
             "coordinator": "llm_batch_planner_with_repair",
             "coordinator_type": "llm",
@@ -738,6 +823,7 @@ def _judge_aggregate(
                     "turns": item["result"].get("turns"),
                     "tool_calls": item["result"].get("tool_calls"),
                     "missing": item["result"].get("r_missing", []),
+                    "tool_counts": item["result"].get("tool_counts") or {},
                 }
                 for item in batch_results
             ],
@@ -770,6 +856,7 @@ def _write_aggregate_trace(run_id: str, aggregate: dict[str, Any]) -> None:
         "required_ids": aggregate.get("required_ids", []),
         "r_verdicts": aggregate.get("r_verdicts", {}),
         "r_missing": aggregate.get("r_missing", []),
+        "tool_counts": aggregate.get("tool_counts", {}),
         "usage": aggregate.get("usage", {}),
         "orchestration": aggregate.get("orchestration", {}),
     }
@@ -841,9 +928,9 @@ def run_orchestrated_evaluation(
     # Sort by label so trace output and repair loop see a consistent order.
     batch_results.sort(key=lambda x: x["batch_label"])
 
-    # Repair budget: parallel phase "costs" as many turns as the slowest batch.
-    executor_turns_used = max(
-        (int(item["result"].get("turns", 0)) for item in batch_results), default=0
+    # Sum semantics: max_turns is the hard ceiling across all agent turns combined.
+    executor_turns_used = sum(
+        int(item["result"].get("turns", 0)) for item in batch_results
     )
 
     MAX_REPAIR_ATTEMPTS_PER_R = 2  # give up on an R after this many repair attempts with no verdict

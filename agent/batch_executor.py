@@ -1,6 +1,6 @@
-"""Batch executor: Bedrock-backed Claude tool-use loop.
+"""Batch executor: LLM tool-use loop.
 
-Reads a system prompt + spec + target URL, runs Claude in a tool-use loop
+Reads a system prompt + spec + target URL, runs the LLM in a tool-use loop
 until either submit_verdict is called or max_turns is exceeded.
 
 Evaluation mode is always cover_all: the executor must emit submit_verdict_for_R
@@ -21,7 +21,7 @@ from anthropic import Anthropic, AnthropicBedrock
 from config.config import (
     DEFAULT_MAX_TURNS, MAX_TOKENS, TEMPERATURE, TOP_P_RECORDED, TOP_K_RECORDED,
     DEFAULT_BEDROCK_MODEL, DEFAULT_DIRECT_MODEL,
-    BEDROCK_PRICING_VERSION, INPUT_COST_PER_MTOK, OUTPUT_COST_PER_MTOK,
+    PRICING_VERSION, INPUT_COST_PER_MTOK, OUTPUT_COST_PER_MTOK,
     CACHE_CREATION_PER_MTOK, CACHE_READ_PER_MTOK,
 )
 from conversation_memory import Memory, RequiredCategorySpec
@@ -35,7 +35,7 @@ def estimate_cost(
     cache_creation_tokens: int = 0,
     cache_read_tokens: int = 0,
 ) -> float:
-    """Estimate USD cost for a Bedrock Sonnet 4.5 call from token counts."""
+    """Estimate USD cost from token counts."""
     return (
         input_tokens * INPUT_COST_PER_MTOK / 1_000_000
         + output_tokens * OUTPUT_COST_PER_MTOK / 1_000_000
@@ -45,7 +45,7 @@ def estimate_cost(
 
 
 def get_client():
-    """Construct an Anthropic client, defaulting to Bedrock."""
+    """Construct the LLM client based on LLM_BACKEND env var."""
     backend = os.environ.get("ANTHROPIC_BACKEND", "bedrock").lower()
     if backend == "bedrock":
         return AnthropicBedrock(aws_region=os.environ.get("AWS_REGION", "us-west-2"))
@@ -63,7 +63,7 @@ def get_model_id() -> str:
 def _print_block_text(content_blocks: list) -> None:
     for block in content_blocks:
         if block.type == "text" and block.text.strip():
-            print(f"  Claude: {block.text.strip()}")
+            print(f"  LLM: {block.text.strip()}")
 
 
 def _truncate(s: str, n: int = 200) -> str:
@@ -98,7 +98,7 @@ def _build_repro_metadata(
         "temperature": TEMPERATURE,
         "top_p_recorded": TOP_P_RECORDED,
         "top_k_recorded": TOP_K_RECORDED,
-        "note": "Bedrock rejects both temperature+top_p; only temperature is sent. top_p/top_k are recorded for provenance.",
+        "note": "Only temperature is sent to the LLM; top_p/top_k are recorded for provenance.",
         "eval_mode": "cover_all",
         "max_turns": max_turns,
         "max_tokens_per_turn": MAX_TOKENS,
@@ -268,6 +268,7 @@ def run_agent(
     turn = 0
     r_verdicts: dict[str, dict[str, str]] = {}
     r_verdict_history: dict[str, list[dict[str, Any]]] = {}
+    tool_counts: dict[str, int] = {}
     per_turn_usage: list[dict[str, int]] = []
     all_turns_trace: list[dict] = []
     total_input = 0
@@ -324,7 +325,7 @@ def run_agent(
         memory.record_assistant_response(response.content, turn=turn)
         _print_block_text(response.content)
 
-        # Collect Claude's text reasoning for this turn.
+        # Collect the LLM's text reasoning for this turn.
         turn_text = " ".join(
             block.text.strip()
             for block in response.content
@@ -341,6 +342,7 @@ def run_agent(
                 continue
 
             tool_call_count += 1
+            tool_counts[block.name] = tool_counts.get(block.name, 0) + 1
             args_str = json.dumps(block.input, ensure_ascii=False)
             print(f"  → {block.name}({_truncate(args_str, 300)})")
 
@@ -568,6 +570,7 @@ def run_agent(
         if len(history) > 1
     }
     verdict["r_missing"] = [r for r in required_ids if r not in r_verdicts]
+    verdict["tool_counts"] = dict(sorted(tool_counts.items(), key=lambda x: -x[1]))
 
     repro_meta["finished_at_utc"] = datetime.now(timezone.utc).isoformat()
     verdict["repro"] = repro_meta
@@ -584,7 +587,7 @@ def run_agent(
         "cache_creation_input_tokens": total_cache_creation,
         "cache_read_input_tokens": total_cache_read,
         "cost_usd": round(final_cost, 6),
-        "pricing_version": BEDROCK_PRICING_VERSION,
+        "pricing_version": PRICING_VERSION,
         "per_turn": per_turn_usage,
     }
     verdict["events"] = list(EVENT_LOG)
