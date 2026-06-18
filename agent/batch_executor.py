@@ -168,6 +168,8 @@ def run_agent(
     auto_submit_on_r_coverage: bool = False,
     write_trace: bool = True,
     executor_label: str = "",
+    auth_context: str = "",
+    shared_prefix: str = "",
 ) -> dict[str, Any]:
     """Drive the agent through a cover_all tool-use loop. Returns the verdict dict.
 
@@ -184,7 +186,7 @@ def run_agent(
     """
     # Clear module-level state for this run.
     EVENT_LOG.clear()
-    for _sess in SESSIONS.values():
+    for _sess in list(SESSIONS.values()):
         try:
             _sess.close()
         except Exception:
@@ -213,13 +215,19 @@ def run_agent(
     )
 
     # Cache breakpoint 3: initial user message (spec + target + run config).
-    # The spec text is static for the entire run — mark it so the API can
-    # cache it and avoid re-processing it on every turn.
+    # Auth context is prepended here — it lives in _initial_message which is
+    # NEVER dropped by Memory trimming, so auth info survives context resets.
+    auth_block = (
+        f"=== AUTHENTICATION (LIVE-VERIFIED — follow exactly, do NOT deviate) ===\n"
+        f"{auth_context.strip()}\n\n"
+        if auth_context.strip() else ""
+    )
     initial_user_text = (
-        f"=== SPEC ===\n{spec}\n\n"
-        f"=== TARGET ===\n{target}\n\n"
-        f"=== RUN CONFIG ===\n{coverage_line}\n{mode_line}\n\n"
-        f"Begin the evaluation."
+        auth_block
+        + f"=== SPEC ===\n{spec}\n\n"
+        + f"=== TARGET ===\n{target}\n\n"
+        + f"=== RUN CONFIG ===\n{coverage_line}\n{mode_line}\n\n"
+        + f"Begin the evaluation."
     )
     initial_message = {"role": "user", "content": [
         {"type": "text", "text": initial_user_text, "cache_control": {"type": "ephemeral"}}
@@ -232,7 +240,7 @@ def run_agent(
 
     repro_meta = _build_repro_metadata(
         spec_text=spec,
-        system_prompt_text=system_prompt,
+        system_prompt_text=shared_prefix + system_prompt,
         target=target,
         model=model,
         max_turns=max_turns,
@@ -254,8 +262,19 @@ def run_agent(
     run_id = run_id_override if run_id_override else str(int(datetime.now(timezone.utc).timestamp()))
 
     # Build cached versions of the two static inputs.
-    # Cache breakpoint 1: system prompt (same for every turn).
-    cached_system = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
+    # Cache breakpoint 1: system prompt.
+    # When shared_prefix is provided (orchestrated mode), split into two blocks:
+    #   Block 1 (shared_prefix): identical across all parallel batch executors →
+    #     cached once, read by every subsequent turn of every batch.
+    #   Block 2 (system_prompt): batch-specific Rs section (~200 tokens, no cache).
+    # Without shared_prefix (single-agent mode), one block with cache_control.
+    if shared_prefix.strip():
+        cached_system = [
+            {"type": "text", "text": shared_prefix, "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": system_prompt},
+        ]
+    else:
+        cached_system = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
     # Cache breakpoint 2: tool schemas (same for every turn).
     # The cache boundary sits at the last tool — everything up to and including
     # it is cached after the first creation.

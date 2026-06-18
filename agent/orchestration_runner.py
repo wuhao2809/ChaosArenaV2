@@ -383,17 +383,30 @@ def _exploration_executor_prompt(
     run_id: str,
     r_verdicts_summary: str,
     discovery_context: str,
+    auth_context: str = "",
+    playbook: str = "",
 ) -> str:
     """Build the system prompt for the dedicated exploration executor."""
-    api_ctx = (
-        f"\n\n# API CONTEXT (pre-run discovery)\n\n{discovery_context.strip()}\n"
-        if discovery_context.strip() else ""
-    )
+    if playbook.strip():
+        ctx_block = (
+            f"\n\n# API PLAYBOOK (live-probed — follow exactly)\n\n{playbook.strip()}\n"
+        )
+    else:
+        auth_block = (
+            f"\n\n# AUTHENTICATION — LIVE-VERIFIED (follow exactly, do NOT deviate)\n\n"
+            f"{auth_context.strip()}\n"
+            if auth_context.strip() else ""
+        )
+        api_ctx = (
+            f"\n\n# API CONTEXT (pre-run discovery)\n\n{discovery_context.strip()}\n"
+            if discovery_context.strip() else ""
+        )
+        ctx_block = auth_block + api_ctx
     r_summary = (
         f"\n\n# ALREADY VERIFIED (do not re-test these)\n\n{r_verdicts_summary.strip()}\n"
         if r_verdicts_summary.strip() else ""
     )
-    return _EXPLORATION_SYSTEM + api_ctx + r_summary + f"\n\n# RUN ID\n\n{run_id}\n"
+    return _EXPLORATION_SYSTEM + ctx_block + r_summary + f"\n\n# RUN ID\n\n{run_id}\n"
 
 
 def _format_exploration_spec(original_spec: str) -> str:
@@ -461,11 +474,12 @@ def _batch_max_turns(
     Repair batches:  2.0× estimated + 4, floor 10.
     Both are also capped at remaining_turns // remaining_batches (fairness).
     """
+    AUTH_OVERHEAD = 2
     estimated = max(1, batch.estimated_turns)
     if is_repair:
-        per_batch_cap = max(10, math.ceil(estimated * 2.0) + 4)
+        per_batch_cap = max(10, math.ceil(estimated * 2.0) + 4 + AUTH_OVERHEAD)
     else:
-        per_batch_cap = max(6, math.ceil(estimated * 1.5) + 2)
+        per_batch_cap = max(6, math.ceil(estimated * 1.5) + 2 + AUTH_OVERHEAD)
     if remaining_turns is not None:
         fairness_cap = max(6, remaining_turns // max(1, remaining_batches))
         return min(per_batch_cap, fairness_cap)
@@ -486,17 +500,22 @@ def _run_one_batch(
     target: str,
     discovery_context: str,
     max_turns: int,
+    auth_context: str = "",
+    playbook: str = "",
 ) -> dict[str, Any]:
     """Run one executor batch in a worker thread."""
     batch_run_id = f"{run_id}__{batch.label}"
     # No fairness cap for parallel batches — they don't compete for a sequential pool.
     batch_max_turns = _batch_max_turns(batch, max_turns)
     batch_spec = _format_batch_spec(spec, parsed_spec, batch)
-    batch_prompt = _executor_prompt(system_prompt, run_id, batch, discovery_context)
+    shared_prefix, batch_suffix = _executor_prompt(
+        system_prompt, run_id, batch, discovery_context, auth_context, playbook
+    )
     print(f"\n{'='*72}\n[executor:{batch.label}] Rs={batch.ids} max_turns={batch_max_turns}\n{'='*72}")
     started_at = datetime.now(timezone.utc).isoformat()
     result = run_agent(
-        system_prompt=batch_prompt,
+        system_prompt=batch_suffix,
+        shared_prefix=shared_prefix,
         spec=batch_spec,
         target=target,
         dump_messages_to=None,
@@ -505,6 +524,7 @@ def _run_one_batch(
         auto_submit_on_r_coverage=True,
         write_trace=False,
         executor_label=batch.label,
+        auth_context=auth_context,
     )
     return {
         "batch_label": batch.label,
@@ -515,22 +535,49 @@ def _run_one_batch(
     }
 
 
-def _executor_prompt(system_prompt: str, run_id: str, batch: RBatch, discovery_context: str = "") -> str:
+def _executor_prompt(
+    system_prompt: str,
+    run_id: str,
+    batch: RBatch,
+    discovery_context: str = "",
+    auth_context: str = "",
+    playbook: str = "",
+) -> tuple[str, str]:
+    """Return (shared_prefix, batch_suffix).
+
+    shared_prefix is identical for every batch in a run — safe to cache once and
+    share across all parallel executors.
+    batch_suffix is the small batch-specific section (~200 tokens, no cache needed).
+    """
     ids = ", ".join(batch.ids)
-    api_ctx_block = (
-        f"\n\n# API CONTEXT (pre-run discovery)\n\n{discovery_context.strip()}\n"
-        if discovery_context.strip() else ""
-    )
-    return (
-        system_prompt
-        + api_ctx_block
-        + "\n\n# Orchestrated Batch Executor Mode\n\n"
+    # Playbook (from probe agent) supersedes both auth and discovery context.
+    # Fall back to individual blocks when no playbook is available.
+    if playbook.strip():
+        shared_prefix = (
+            system_prompt
+            + f"\n\n# API PLAYBOOK (live-probed — follow exactly)\n\n{playbook.strip()}\n"
+        )
+    else:
+        auth_block = (
+            f"\n\n# AUTHENTICATION — LIVE-VERIFIED (follow exactly, do NOT deviate)\n\n"
+            f"{auth_context.strip()}\n"
+            if auth_context.strip() else ""
+        )
+        api_ctx_block = (
+            f"\n\n# API CONTEXT (pre-run discovery)\n\n{discovery_context.strip()}\n"
+            if discovery_context.strip() else ""
+        )
+        shared_prefix = system_prompt + auth_block + api_ctx_block
+
+    batch_suffix = (
+        "\n\n# Orchestrated Batch Executor Mode\n\n"
         + f"You are one executor assigned only this Required-R batch: {ids}.\n"
         + "Do not attempt Required Rs outside this batch. Do not perform Open Exploration.\n"
         + "Use unique resource ids prefixed with "
         + f"`{run_id}_{batch.label}` to avoid interfering with other executor batches.\n"
         + "After every R in this batch has a `submit_verdict_for_R`, call `submit_verdict` immediately.\n"
     )
+    return shared_prefix, batch_suffix
 
 
 _DISCOVERY_SYSTEM = """\
@@ -558,11 +605,174 @@ Rules:
 """
 
 
+_PROBE_TOOL_NAMES = frozenset({"http_call", "http_call_with_session", "remember_fact", "record_event"})
+
+_SUBMIT_PLAYBOOK_SCHEMA: dict[str, Any] = {
+    "name": "submit_playbook",
+    "description": (
+        "Submit the final API playbook. Call this when you have finished probing all "
+        "key endpoints. This ends the probe session immediately."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "content": {
+                "type": "string",
+                "description": (
+                    "Complete API playbook in markdown. Must include: "
+                    "## Authentication, ## Endpoint Map, ## Response Shapes, "
+                    "## Known Constraints, ## Notes."
+                ),
+            }
+        },
+        "required": ["content"],
+    },
+}
+
+
+def _run_api_probe_agent(target: str, spec: str, max_turns: int = 10) -> tuple[str, dict[str, Any]]:
+    """Run a short LLM tool-use loop to probe the API surface and produce a playbook.
+
+    Returns (playbook_markdown, usage_dict).
+    The playbook is injected into every batch executor's shared cached system prompt.
+    Falls back to ("", {}) on any failure.
+    """
+    from tools import dispatch_tool, SESSIONS, EVENT_LOG, TOOL_SCHEMAS
+
+    EVENT_LOG.clear()
+    for sess in list(SESSIONS.values()):
+        try:
+            sess.close()
+        except Exception:
+            pass
+    SESSIONS.clear()
+
+    # Pre-probe auth so the agent doesn't waste turns on basic auth discovery.
+    pre_auth = _probe_auth(target)
+    auth_hint = (
+        f"\n\n=== PRE-VERIFIED AUTH ===\n{pre_auth}\n"
+        f"Skip authentication discovery — auth is already confirmed above. "
+        f"Focus your turns on endpoint shapes, required body fields, and edge constraints."
+        if pre_auth.strip() else ""
+    )
+
+    client = get_client()
+    model = get_model_id()
+
+    here = Path(__file__).resolve().parent
+    probe_system = (here / "prompts" / "api_probe_system.txt").read_text()
+
+    probe_tools = [t for t in TOOL_SCHEMAS if t.get("name") in _PROBE_TOOL_NAMES]
+    probe_tools = probe_tools + [_SUBMIT_PLAYBOOK_SCHEMA]
+
+    initial_text = (
+        f"=== SERVICE SPEC ===\n{spec}\n\n"
+        f"=== TARGET ===\n{target}"
+        f"{auth_hint}\n\nBegin probing."
+    )
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": [{"type": "text", "text": initial_text}]}
+    ]
+    cached_probe_system = [
+        {"type": "text", "text": probe_system, "cache_control": {"type": "ephemeral"}}
+    ]
+
+    total_input = total_output = 0
+    total_cache_creation = total_cache_read = 0
+    total_cost = 0.0
+    playbook = ""
+    turns_used = 0
+
+    for turn in range(1, max_turns + 1):
+        turns_used = turn
+        resp = client.messages.create(
+            model=model,
+            max_tokens=MAX_TOKENS,
+            temperature=TEMPERATURE,
+            system=cached_probe_system,
+            tools=probe_tools,
+            messages=messages,
+        )
+
+        u = resp.usage
+        ci = getattr(u, "cache_creation_input_tokens", 0) or 0
+        cr = getattr(u, "cache_read_input_tokens", 0) or 0
+        total_input += u.input_tokens
+        total_output += u.output_tokens
+        total_cache_creation += ci
+        total_cache_read += cr
+        total_cost += estimate_cost(u.input_tokens, u.output_tokens, ci, cr)
+
+        content_blocks = [
+            (b.model_dump() if hasattr(b, "model_dump") else b) for b in resp.content
+        ]
+        messages.append({"role": "assistant", "content": content_blocks})
+
+        tool_results: list[dict[str, Any]] = []
+        done = False
+
+        for block in resp.content:
+            if not (hasattr(block, "type") and block.type == "tool_use"):
+                continue
+            name = block.name
+            args = block.input or {}
+            if name == "submit_playbook":
+                playbook = args.get("content", "")
+                done = True
+                result: Any = {"submitted": True}
+            elif name in _PROBE_TOOL_NAMES:
+                result = dispatch_tool(name, args, target)
+            else:
+                result = {"error": f"Unknown probe tool: {name}"}
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": json.dumps(result, default=str),
+            })
+
+        if tool_results:
+            messages.append({"role": "user", "content": tool_results})
+
+        if done or resp.stop_reason == "end_turn":
+            break
+
+        # Inject runtime reminder 2 turns before budget runs out
+        turns_remaining = max_turns - turn
+        if turns_remaining == 2:
+            messages.append({
+                "role": "user",
+                "content": [{
+                    "type": "text",
+                    "text": (
+                        "[runtime reminder] You have 2 turns left. "
+                        "You MUST call submit_playbook NOW with everything you have discovered so far. "
+                        "Do not make any more http_call probes — compile and submit the playbook immediately."
+                    ),
+                }],
+            })
+
+    print(
+        f"[probe] done in {turns_used} turns  cost=${total_cost:.4f}  "
+        f"playbook={len(playbook)} chars"
+    )
+    usage_dict: dict[str, Any] = {
+        "input_tokens": total_input,
+        "output_tokens": total_output,
+        "cache_creation_input_tokens": total_cache_creation,
+        "cache_read_input_tokens": total_cache_read,
+        "cost_usd": round(total_cost, 6),
+        "turns": turns_used,
+        "model": model,
+    }
+    return playbook, usage_dict
+
+
 def _probe_auth(target: str) -> str:
     """Probe the live service to discover its authentication mechanism.
 
-    Tries common auth patterns and returns a paragraph describing what works.
-    Never raises — returns empty string on complete failure.
+    Tries common auth patterns, verifies the session actually works on a
+    protected endpoint, and detects required query parameters (e.g. ?name=).
+    Returns a description string. Never raises — returns "" on complete failure.
     """
     from tools import dispatch_tool, SESSIONS
     import uuid
@@ -576,35 +786,89 @@ def _probe_auth(target: str) -> str:
     # Try 1: session-cookie via POST /register
     for reg_path in ("/register", "/signup", "/customer", "/api/register", "/users"):
         try:
-            body = {"name": name, "username": username, "email": email, "password": password}
-            r = dispatch_tool("http_call", {"method": "POST", "path": reg_path, "json_body": body}, target)
-            status = r.get("status", 0)
+            # Try minimal body first, then add optional fields that some services require
+            body_variants = [
+                {"name": name, "username": username, "email": email, "password": password},
+                {"name": name, "email": email, "password": password},
+                {
+                    "name": name, "username": username, "email": email, "password": password,
+                    "phone": "12345678901", "address": "123 Test Street",
+                },
+                {
+                    "name": name, "email": email, "password": password,
+                    "phone": "12345678901", "address": "123 Test Street",
+                },
+            ]
+            r, body = None, {}
+            for body_candidate in body_variants:
+                r = dispatch_tool("http_call", {"method": "POST", "path": reg_path, "json_body": body_candidate}, target)
+                if r.get("status", 0) in (200, 201):
+                    body = body_candidate
+                    break
+            status = r.get("status", 0) if r else 0
             if status in (200, 201):
-                # Check if a session cookie was set via http_call_with_session
                 sess_id = f"auth_probe_{suffix}"
+                reg_body2 = {**body, "name": name + "2", "username": username + "2",
+                             "email": f"{username}2@chaos.test"}
                 r2 = dispatch_tool("http_call_with_session", {
                     "method": "POST", "path": reg_path,
-                    "json_body": {**body, "username": username + "2", "email": f"{username}2@chaos.test"},
+                    "json_body": reg_body2,
                     "session_id": sess_id,
                 }, target)
                 if sess_id in SESSIONS and SESSIONS[sess_id].cookies:
                     cookie_names = list(SESSIONS[sess_id].cookies.keys())
+                    name2 = name + "2"
+
+                    # Verify the session actually works on a protected endpoint.
+                    # Also detect whether a ?name= query param is required.
+                    protected_paths = ["/customer/cart", "/customer/orders",
+                                       "/customer", "/api/profile", "/profile"]
+                    name_param_required = False
+                    for ppath in protected_paths:
+                        try:
+                            rp = dispatch_tool("http_call_with_session", {
+                                "method": "GET", "path": ppath,
+                                "session_id": sess_id,
+                            }, target)
+                            if rp.get("status") not in (401, 403, 404, 500):
+                                break  # works without ?name=
+                            if rp.get("status") in (401, 403):
+                                # Try with ?name= query param
+                                rp2 = dispatch_tool("http_call_with_session", {
+                                    "method": "GET", "path": f"{ppath}?name={name2}",
+                                    "session_id": sess_id,
+                                }, target)
+                                if rp2.get("status") not in (401, 403):
+                                    name_param_required = True
+                                    break
+                        except Exception:
+                            continue
+
+                    name_note = (
+                        f" CRITICAL: You MUST also append ?name=<registered_name> to every "
+                        f"protected endpoint call (e.g. GET /customer/cart?name={{name}}, "
+                        f"PUT /customer/cart?name={{name}}). "
+                        f"The service returns 401 if ?name= is missing even with a valid session."
+                        if name_param_required else ""
+                    )
+                    body_fields = ", ".join(f'"{k}": ...' for k in body.keys())
                     return (
-                        f"Authentication: POST {reg_path} with JSON body "
-                        f'{{\"name\": ..., \"username\": ..., \"email\": ..., \"password\": ...}} '
+                        f"LIVE-VERIFIED: POST {reg_path} with JSON body "
+                        f"{{{body_fields}}} "
                         f"returns HTTP {r2.get('status', '?')} and sets session cookies "
                         f"({', '.join(cookie_names)}). "
-                        f"Use http_call_with_session with a session_id per user — cookies are sticky. "
-                        f"There is no separate /login endpoint. "
-                        f"To create two users, call POST {reg_path} twice with different credentials."
+                        f"Use http_call_with_session with a unique session_id per user — cookies are sticky. "
+                        f"There is NO separate /login endpoint (do not try Basic Auth — it returns 401). "
+                        f"To create two users, register twice with different credentials and different session_ids."
+                        f"{name_note}"
                     )
                 elif status in (200, 201):
                     body_text = str(r.get("body", ""))
                     if any(k in body_text.lower() for k in ("token", "access_token", "jwt")):
                         return (
-                            f"Authentication: POST {reg_path} with JSON credentials returns "
-                            f"HTTP {status} with a token in the response body. "
-                            f"Extract the token and send it as 'Authorization: Bearer <token>' on subsequent requests."
+                            f"LIVE-VERIFIED: POST {reg_path} with JSON credentials returns "
+                            f"HTTP {status} with a bearer token in the response body. "
+                            f"Extract the token and send as 'Authorization: Bearer <token>' on all protected requests."
                         )
         except Exception:
             continue
@@ -618,7 +882,7 @@ def _probe_auth(target: str) -> str:
                 body_text = str(r.get("body", ""))
                 if any(k in body_text.lower() for k in ("token", "access_token", "jwt")):
                     return (
-                        f"Authentication: POST {login_path} with {{\"username\": ..., \"password\": ...}} "
+                        f"LIVE-VERIFIED: POST {login_path} with {{\"username\": ..., \"password\": ...}} "
                         f"returns HTTP {r.get('status')} with a bearer token in the response body. "
                         f"Use 'Authorization: Bearer <token>' on all subsequent protected requests."
                     )
@@ -628,12 +892,12 @@ def _probe_auth(target: str) -> str:
     return ""
 
 
-def _run_discovery_probe(target: str, spec: str) -> tuple[str, dict[str, Any]]:
+def _run_discovery_probe(target: str, spec: str) -> tuple[str, str, dict[str, Any]]:
     """Ask the LLM to infer the API surface from the spec, confirm the service is up.
 
-    Returns (context_string, usage_dict). The context string is injected into every
-    batch executor prompt so executors don't cold-start with wrong HTTP methods or
-    resort to collection endpoints that flood the context with historical test data.
+    Returns (api_context_string, auth_info_string, usage_dict).
+    auth_info_string is returned separately so callers can inject it as a
+    distinct hardcoded block — not mixed with LLM-inferred content.
     """
     from tools import dispatch_tool
 
@@ -642,15 +906,12 @@ def _run_discovery_probe(target: str, spec: str) -> tuple[str, dict[str, Any]]:
     health = dispatch_tool("http_call", {"method": "GET", "path": "/health"}, target)
     lines.append(f"Service health: GET /health → {health.get('status', '?')}")
 
-    # Probe auth mechanism before calling the LLM — result goes into discovery context
+    # Probe auth mechanism — returned separately, NOT appended to lines
     auth_info = _probe_auth(target)
     if auth_info:
-        lines.append("")
-        lines.append(f"Authentication (live probe): {auth_info}")
         print(f"[orchestrator] auth probe: {auth_info[:120]}...")
     else:
-        lines.append("")
-        lines.append("Authentication (live probe): Could not determine auth mechanism — executors should try common patterns.")
+        print("[orchestrator] auth probe: no mechanism detected — executors will self-discover")
 
     user_text = f"Health check result: {health}\n\nSpec:\n{spec}"
     result, usage = _coordinator_json_call("api_discovery", _DISCOVERY_SYSTEM, user_text)
@@ -679,7 +940,7 @@ def _run_discovery_probe(target: str, spec: str) -> tuple[str, dict[str, Any]]:
         "IMPORTANT: Never call collection endpoints for discovery — they return all historical "
         "test data and will flood your context. Use only single-resource paths with IDs you control."
     )
-    return "\n".join(lines), usage
+    return "\n".join(lines), auth_info, usage
 
 
 def _merge_usage(
@@ -892,17 +1153,31 @@ def run_orchestrated_evaluation(
         print(f"[orchestrator]   {batch.label}: {batch.ids} estimated={batch.estimated_turns}")
 
     print()
-    print("[orchestrator] running pre-run LLM API discovery...")
+    print("[orchestrator] running pre-run API probe agent...")
+    playbook = ""
+    discovery_context = ""
+    auth_context = ""
     try:
-        discovery_context, discovery_usage = _run_discovery_probe(target, spec)
-        coordinator_usages.append({**discovery_usage, "phase": "api_discovery"})
-        print("[orchestrator] discovery results:")
-        for line in discovery_context.splitlines():
-            if line.strip():
-                print(f"[orchestrator]   {line}")
+        probe_max_turns = max(5, int(max_turns * 0.30))
+        playbook, probe_usage = _run_api_probe_agent(target, spec, max_turns=probe_max_turns)
+        coordinator_usages.append({**probe_usage, "phase": "api_probe"})
+        # Use playbook as auth_context so it also survives Memory trimming (in initial_message)
+        auth_context = playbook
+        if not playbook:
+            raise ValueError("probe agent returned empty playbook")
     except Exception as exc:
-        print(f"[orchestrator] discovery failed ({exc}); executors will self-discover")
-        discovery_context = ""
+        print(f"[orchestrator] probe agent failed ({exc}); falling back to legacy discovery")
+        try:
+            discovery_context, auth_context, discovery_usage = _run_discovery_probe(target, spec)
+            coordinator_usages.append({**discovery_usage, "phase": "api_discovery"})
+            print("[orchestrator] fallback discovery results:")
+            for line in discovery_context.splitlines():
+                if line.strip():
+                    print(f"[orchestrator]   {line}")
+        except Exception as exc2:
+            print(f"[orchestrator] fallback discovery also failed ({exc2}); executors will self-discover")
+            discovery_context = ""
+            auth_context = ""
 
     batch_results: list[dict[str, Any]] = []
     cum_cost_usd = 0.0
@@ -915,7 +1190,7 @@ def run_orchestrated_evaluation(
             pool.submit(
                 _run_one_batch,
                 batch, run_id, system_prompt, spec, parsed_spec,
-                target, discovery_context, max_turns,
+                target, discovery_context, max_turns, auth_context, playbook,
             ): batch
             for batch in batches
         }
@@ -969,7 +1244,9 @@ def run_orchestrated_evaluation(
         batch_run_id = f"{run_id}__{repair_label}"
         batch_max_turns = _batch_max_turns(repair_batch, max_turns, remaining_turns, is_repair=True)
         batch_spec = _format_batch_spec(spec, parsed_spec, repair_batch)
-        batch_prompt = _executor_prompt(system_prompt, run_id, repair_batch, discovery_context)
+        shared_prefix, batch_suffix = _executor_prompt(
+            system_prompt, run_id, repair_batch, discovery_context, auth_context, playbook
+        )
         print()
         print("=" * 72)
         print(
@@ -980,7 +1257,8 @@ def run_orchestrated_evaluation(
 
         started_at = datetime.now(timezone.utc).isoformat()
         result = run_agent(
-            system_prompt=batch_prompt,
+            system_prompt=batch_suffix,
+            shared_prefix=shared_prefix,
             spec=batch_spec,
             target=target,
             dump_messages_to=None,
@@ -989,6 +1267,7 @@ def run_orchestrated_evaluation(
             auto_submit_on_r_coverage=True,
             write_trace=False,
             executor_label=repair_label,
+            auth_context=auth_context,
         )
         executor_turns_used += int(result.get("turns", 0))
         batch_results.append({
@@ -1027,6 +1306,8 @@ def run_orchestrated_evaluation(
             run_id=run_id,
             r_verdicts_summary=r_verdicts_summary,
             discovery_context=discovery_context,
+            auth_context=auth_context,
+            playbook=playbook,
         )
         exploration_spec = _format_exploration_spec(spec)
 
@@ -1046,6 +1327,7 @@ def run_orchestrated_evaluation(
             auto_submit_on_r_coverage=False,
             write_trace=False,
             executor_label="exploration",
+            auth_context=auth_context,
         )
         executor_turns_used += int(exploration_result.get("turns", 0))
         batch_results.append({

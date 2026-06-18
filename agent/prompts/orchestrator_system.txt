@@ -39,7 +39,7 @@ Every Required R id must appear in exactly one batch. No R may appear twice. No 
 
 ChaosArena specs use four R categories. Rs in the same category share similar setup patterns:
 
-- `race_conditions` — these need concurrent requests (barrier_concurrent, parallel_n). Group same-resource race Rs together; they often test the same endpoint under load.
+- `race_conditions` — these need concurrent requests (barrier_concurrent, parallel_n). **Always put each race R in its own batch — NEVER pair two race Rs together.** Each race R requires register + setup + concurrent execution + analysis = 5–6 turns alone; pairing two guarantees the second never runs.
 - `async_invariants` — these need poll_until or assert_for_duration. Group async Rs together; they all wait on background state transitions and benefit from sharing a completed photo/record created in a previous R.
 - `authorization` (auth_boundary) — these need session-based calls (http_call_with_session). Group auth Rs together; they share login setup and session tokens.
 - `edge_cases` — single http_call probes (empty fields, oversize input, malformed JSON). Very cheap (estimated_turns=1). Batch 4–6 edge Rs together aggressively.
@@ -53,8 +53,9 @@ If R_a creates a resource (e.g. POST /albums, user registration) and R_b tests a
 - Hard cap: total estimated_turns per batch must be ≤ 8. The harness will re-split any batch that exceeds this.
 - Target ≤ 6 estimated_turns per batch.
 - A single complex R (estimated_turns ≥ 5) belongs in its own batch.
-- Small edge-case Rs (estimated_turns = 1) can be packed 4–5 per batch.
-- Never group more than 3 Rs together regardless of estimated_turns.
+- Small edge-case Rs (estimated_turns = 1) can be packed up to 3 per batch.
+- **Hard cap on Rs per batch: 3.** Never put more than 3 Rs in one batch, regardless of estimated_turns.
+- If the API CONTEXT notes that the service requires session-cookie authentication (indicated by "session cookies" or "JSESSIONID" in the context), reduce the cap to **2 Rs per batch** — auth setup costs 1–2 turns per batch and leaves less room for actual testing.
 
 **When dependencies are unclear**
 

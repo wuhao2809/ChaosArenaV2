@@ -16,6 +16,7 @@ A REST API for a multi-album photo store. Clients can create or update albums vi
 - **When**: 10 concurrent POST /albums/A/photos requests are issued within the same 50ms window
 - **Then**: All 10 receive 202; the seq values across all responses are exactly the set {1,2,3,4,5,6,7,8,9,10} with no duplicates and no gaps; subsequent GET calls for each photo_id confirm the same unique seq values
 - **Priority**: HIGH
+- **Estimated turns**: 3
 
 ### R2. Concurrent PUT same album_id (upsert race)
 
@@ -23,6 +24,7 @@ A REST API for a multi-album photo store. Clients can create or update albums vi
 - **When**: 5 concurrent PUT /albums/X requests with identical bodies are issued simultaneously
 - **Then**: All 5 return 200 or 201; GET /albums/X returns exactly one record with consistent field values; GET /albums does not contain duplicate entries for X; no 500 responses
 - **Priority**: HIGH
+- **Estimated turns**: 3
 
 ### R3. Concurrent DELETE of the same photo
 
@@ -30,6 +32,7 @@ A REST API for a multi-album photo store. Clients can create or update albums vi
 - **When**: Two DELETE /albums/A/photos/P requests are issued in parallel
 - **Then**: At least one returns 200 or 204; neither returns 5xx; the second may return 404 or 200/204 (idempotent); GET /albums/A/photos/P returns 404 after both complete; the backing file is deleted exactly once (no double-delete 500 from storage)
 - **Priority**: HIGH
+- **Estimated turns**: 3
 
 ### R4. Background worker vs concurrent DELETE race
 
@@ -37,6 +40,7 @@ A REST API for a multi-album photo store. Clients can create or update albums vi
 - **When**: DELETE /albums/A/photos/P is issued while the worker is actively writing the result
 - **Then**: Either DELETE wins (photo record gone, worker's write is discarded or no-ops) or worker completes first (photo reaches 'completed', then DELETE removes it); in no case does a 500 occur, an orphan file remain in storage after DELETE, or the photo record reappear as 'completed' after a successful DELETE
 - **Priority**: HIGH
+- **Estimated turns**: 4
 
 <!-- Category: async_invariants — Async / temporal invariants -->
 
@@ -46,6 +50,7 @@ A REST API for a multi-album photo store. Clients can create or update albums vi
 - **When**: GET /albums/:album_id/photos/:photo_id is polled every 2 seconds for up to 30 seconds
 - **Then**: Status transitions to 'completed' (not 'failed', not stuck in 'processing') within 30 seconds; the response at 'completed' includes a non-null 'url' field and the correct 'seq' value
 - **Priority**: HIGH
+- **Estimated turns**: 2
 
 ### R6. Completed photo URL is directly fetchable
 
@@ -53,6 +58,7 @@ A REST API for a multi-album photo store. Clients can create or update albums vi
 - **When**: An HTTP GET is issued directly to that URL (no auth headers)
 - **Then**: The URL returns HTTP 200 with a non-empty body; not 403, 404, 410, or 500; the URL must remain valid for at least the duration of the test run (pre-signed URL expiry must exceed the test window)
 - **Priority**: HIGH
+- **Estimated turns**: 1
 
 ### R7. Backing file removed from storage within 5 seconds of DELETE
 
@@ -60,6 +66,7 @@ A REST API for a multi-album photo store. Clients can create or update albums vi
 - **When**: DELETE /albums/A/photos/P is called and returns 200 or 204; then 5 seconds elapse
 - **Then**: GET /albums/A/photos/P returns 404; an HTTP GET to the previously captured URL no longer returns 200 (expected 403, 404, or 410); both conditions must hold within the 5-second window
 - **Priority**: HIGH
+- **Estimated turns**: 2
 
 ### R8. seq field present and correct during 'processing' state
 
@@ -67,6 +74,7 @@ A REST API for a multi-album photo store. Clients can create or update albums vi
 - **When**: GET /albums/:album_id/photos/:photo_id is called immediately (before processing completes)
 - **Then**: Response is 200 with status='processing'; the 'seq' field is present and equals S (not null, not missing, not 0); this must hold even if the background worker has not yet touched the record
 - **Priority**: HIGH
+- **Estimated turns**: 2
 
 <!-- Category: auth_boundaries — Authorization boundaries -->
 
@@ -80,6 +88,7 @@ A REST API for a multi-album photo store. Clients can create or update albums vi
 - **When**: POST /albums/X/photos with a valid multipart photo field
 - **Then**: 404 Not Found; no photo record is created; no orphan entry appears in any subsequent GET; not 202 or 500
 - **Priority**: HIGH
+- **Estimated turns**: 1
 
 ### R10. Malformed or adversarial album_id in path (path traversal, SQL injection, overlong string)
 
@@ -87,6 +96,7 @@ A REST API for a multi-album photo store. Clients can create or update albums vi
 - **When**: PUT or GET with album_id set to '../admin', "'; DROP TABLE albums;--", or a 10 000-character string
 - **Then**: 400 Bad Request or 404 Not Found; not 500; no database error message leaked in the response body; no unintended file-system access
 - **Priority**: HIGH
+- **Estimated turns**: 1
 
 ### R11. GET /albums returns all albums without implicit pagination truncation
 
@@ -94,6 +104,7 @@ A REST API for a multi-album photo store. Clients can create or update albums vi
 - **When**: GET /albums is called with no query parameters
 - **Then**: Response contains all 1 000 album entries (each with at minimum an 'album_id' field); the list is not silently capped at 100, 200, or any other default page size; response is 200 not 500
 - **Priority**: HIGH
+- **Estimated turns**: 3
 
 ### R12. Oversize photo upload
 
@@ -101,6 +112,7 @@ A REST API for a multi-album photo store. Clients can create or update albums vi
 - **When**: POST /albums/A/photos with a 500 MB binary payload in the 'photo' field
 - **Then**: Either 413 Payload Too Large or 202 Accepted (if the service is designed to handle large files per S15); must not return 500, must not silently hang the connection indefinitely; if 202, the photo must eventually reach 'completed' or 'failed' within the processing deadline
 - **Priority**: HIGH
+- **Estimated turns**: 2
 
 ## Open Exploration
 

@@ -241,7 +241,9 @@ TOOL_SCHEMAS: list[dict] = [
             "Set collect_bodies=true when the response payload itself is the evidence "
             "(for example concurrent photo uploads that must return unique photo_id/seq). "
             "Use this to test concurrency / race / load behavior — any 5xx under "
-            "concurrent load typically indicates a thread-safety bug in the target."
+            "concurrent load typically indicates a thread-safety bug in the target. "
+            "For session-cookie auth: set session_id to the name of a pre-established "
+            "session (created via http_call_with_session) so all N requests carry cookies."
         ),
         "input_schema": {
             "type": "object",
@@ -279,6 +281,15 @@ TOOL_SCHEMAS: list[dict] = [
                     },
                     "required": ["field"],
                 },
+                "session_id": {
+                    "type": ["string", "null"],
+                    "description": (
+                        "Optional. Name of a pre-established session (created via "
+                        "http_call_with_session). When set, all N concurrent requests "
+                        "carry that session's cookies. Use for race tests on "
+                        "session-cookie-authenticated services."
+                    ),
+                },
                 "collect_bodies": {
                     "type": "boolean",
                     "description": (
@@ -305,7 +316,8 @@ TOOL_SCHEMAS: list[dict] = [
             "same resource, or two different writes against the same album_id. "
             "Returns each action's status/body/latency plus the timing skew "
             "between barrier releases (in microseconds). Differs from parallel_n "
-            "in that the two actions can be different (different method/path/body)."
+            "in that the two actions can be different (different method/path/body). "
+            "Each action may carry its own session_id for session-cookie auth."
         ),
         "input_schema": {
             "type": "object",
@@ -318,6 +330,10 @@ TOOL_SCHEMAS: list[dict] = [
                         "path": {"type": "string"},
                         "body": {"type": ["object", "null"]},
                         "headers": {"type": ["object", "null"]},
+                        "session_id": {
+                            "type": ["string", "null"],
+                            "description": "Optional session name for cookie-based auth.",
+                        },
                         "multipart": {
                             "type": ["object", "null"],
                             "description": "Same as http_call multipart — sends multipart/form-data for this action.",
@@ -340,6 +356,10 @@ TOOL_SCHEMAS: list[dict] = [
                         "path": {"type": "string"},
                         "body": {"type": ["object", "null"]},
                         "headers": {"type": ["object", "null"]},
+                        "session_id": {
+                            "type": ["string", "null"],
+                            "description": "Optional session name for cookie-based auth.",
+                        },
                         "multipart": {
                             "type": ["object", "null"],
                             "description": "Same as http_call multipart — sends multipart/form-data for this action.",
@@ -382,6 +402,10 @@ TOOL_SCHEMAS: list[dict] = [
                             "path": {"type": "string"},
                             "body": {"type": ["object", "null"]},
                             "headers": {"type": ["object", "null"]},
+                            "session_id": {
+                                "type": ["string", "null"],
+                                "description": "Optional session name for cookie-based auth.",
+                            },
                             "multipart": {
                                 "type": ["object", "null"],
                                 "description": "Same as http_call multipart — sends multipart/form-data for this action.",
@@ -902,12 +926,30 @@ def parallel_n(
     multipart: dict | None = None,
     collect_bodies: bool = False,
     max_bodies: int = 20,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
-    """Fire N identical requests concurrently against the target."""
+    """Fire N identical requests concurrently against the target.
+
+    If session_id is provided, all N requests reuse that session's cookies
+    (useful for testing authenticated concurrency — e.g., N concurrent
+    addItem calls by the same authenticated user).
+    """
     statuses: list[int] = []
     latencies: list[int] = []
     network_errors: list[str] = []
     response_samples: list[dict[str, Any]] = []
+
+    def _one_request(_idx: int) -> dict[str, Any]:
+        if session_id:
+            return http_call_with_session(
+                session_id=session_id,
+                method=method,
+                path=path,
+                target=target,
+                body=body,
+                headers=headers,
+            )
+        return http_call(method, path, target, body, headers, multipart)
 
     overall_start = time.perf_counter()
     # Cap thread count at min(n, 50) — 50 is enough concurrency for our scale,
@@ -915,7 +957,7 @@ def parallel_n(
     max_workers = min(n, 50)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
-            executor.submit(http_call, method, path, target, body, headers, multipart): idx
+            executor.submit(_one_request, idx): idx
             for idx in range(n)
         }
         for f in as_completed(futures):
@@ -978,17 +1020,31 @@ def _execute_action_at_barrier(
     Returns the http_call result enriched with `release_ts_ns` (the moment
     the barrier released this thread, in nanoseconds since an arbitrary
     epoch — only useful for relative comparison).
+
+    If the action dict contains a `session_id` field, the request is sent
+    via http_call_with_session so that session cookies are carried.
     """
     barrier.wait()
     release_ts_ns = time.perf_counter_ns()
-    result = http_call(
-        method=action["method"],
-        path=action["path"],
-        target=target,
-        body=action.get("body"),
-        headers=action.get("headers"),
-        multipart=action.get("multipart"),
-    )
+    session_id = action.get("session_id")
+    if session_id:
+        result = http_call_with_session(
+            session_id=session_id,
+            method=action["method"],
+            path=action["path"],
+            target=target,
+            body=action.get("body"),
+            headers=action.get("headers"),
+        )
+    else:
+        result = http_call(
+            method=action["method"],
+            path=action["path"],
+            target=target,
+            body=action.get("body"),
+            headers=action.get("headers"),
+            multipart=action.get("multipart"),
+        )
     result["release_ts_ns"] = release_ts_ns
     return result
 
@@ -1280,6 +1336,24 @@ def monitor_while(
 
 def record_event(event_type: str, detail: str, title: str = "") -> dict[str, Any]:
     """Append a forensic event to the run's audit log."""
+    # Dedup by exact title — prevents the agent from re-recording the same finding
+    # after losing track of it across turns.
+    if title:
+        for i, existing in enumerate(EVENT_LOG):
+            if existing.get("title") == title:
+                finding_titles = [
+                    e.get("title", f"#{j+1}")
+                    for j, e in enumerate(EVENT_LOG)
+                    if e.get("event_type") in ("VIOLATION", "WARNING", "OBSERVATION")
+                ]
+                return {
+                    "recorded": False,
+                    "duplicate": True,
+                    "event_id": i + 1,
+                    "message": f"Already recorded as event_id={i + 1}. Do not re-log.",
+                    "all_findings": finding_titles,
+                }
+
     event = {
         "event_type": event_type,
         "detail": detail,
@@ -1288,7 +1362,17 @@ def record_event(event_type: str, detail: str, title: str = "") -> dict[str, Any
     if title:
         event["title"] = title
     EVENT_LOG.append(event)
-    return {"recorded": True, "event_id": len(EVENT_LOG)}
+
+    finding_titles = [
+        e.get("title", f"#{j+1}")
+        for j, e in enumerate(EVENT_LOG)
+        if e.get("event_type") in ("VIOLATION", "WARNING", "OBSERVATION")
+    ]
+    return {
+        "recorded": True,
+        "event_id": len(EVENT_LOG),
+        "all_findings": finding_titles,
+    }
 
 
 def dispatch_tool(name: str, input_args: dict, target: str) -> dict[str, Any]:
@@ -1337,6 +1421,7 @@ def _dispatch_tool_inner(name: str, input_args: dict, target: str) -> dict[str, 
             multipart=input_args.get("multipart"),
             collect_bodies=bool(input_args.get("collect_bodies", False)),
             max_bodies=int(input_args.get("max_bodies", 20)),
+            session_id=input_args.get("session_id") or None,
         )
     if name == "race_pair":
         return race_pair(

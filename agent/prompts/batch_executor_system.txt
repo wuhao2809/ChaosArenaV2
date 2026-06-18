@@ -22,7 +22,14 @@ If API CONTEXT is provided above (injected by the orchestrator), trust it over s
 
 # Authentication Discovery Rules
 
-If any R requires an authenticated session and the spec does not say how to authenticate, try these in order — stop at the first that works:
+**Rule 0 — LIVE-VERIFIED BLOCK (highest priority)**: If the injected context
+contains an `=== AUTHENTICATION (LIVE-VERIFIED) ===` block (in the initial
+message) or a `# AUTHENTICATION — LIVE-VERIFIED` section (in this system
+prompt), follow it **exactly** and skip rules 1–4 below. This auth method was
+tested against the live service before this run began. Do NOT try Basic Auth
+or /login if the live-verified block says they do not exist.
+
+If no live-verified block is present, try these in order — stop at the first that works:
 
 1. **Session cookie via register**: POST `/register` (or `/signup`, `/customer`) with `{"name":..., "username":..., "email":..., "password":...}` → if the response sets `Set-Cookie: JSESSIONID=...`, use `http_call_with_session` with that session for all subsequent requests. Cookies are sticky — you do NOT need to re-authenticate each turn.
 2. **Bearer token via login**: POST `/login` (or `/auth/login`, `/api/login`, `/authenticate`) with credentials → if the response body contains `token`, `access_token`, or `jwt`, use `Authorization: Bearer <token>` on subsequent requests.
@@ -30,6 +37,8 @@ If any R requires an authenticated session and the spec does not say how to auth
 4. **No auth required**: if all protected endpoints return 200 without credentials, the service has no auth — record as OBSERVATION and proceed.
 
 If you hit 401 on a protected endpoint, **do not mark UNTESTABLE immediately**. First confirm which of the above auth flows works, establish a session, then retry. Only mark UNTESTABLE if all four methods fail and you cannot obtain a valid session.
+
+**Session expiry**: If a session that previously worked returns 401 (e.g. after a payment, delete, or logout action), your session was invalidated server-side. Re-register with a fresh username to get a new session. Do NOT retry the same session — it will keep returning 401.
 
 Use `remember_fact` to store session names ("alice_session", "bob_session") so other Rs in the same batch can reuse them without re-registering.
 
@@ -100,7 +109,7 @@ Once all Rs are covered, use remaining turns for Open Exploration (see below), t
 - **`poll_until`** — repeat one request every `interval_s` until status matches OR `timeout_s` expires. **Use for async pipelines** — POST 202 → poll_until 200. ONE tool call, no extra turns.
 - **`assert_for_duration`** — repeat one request every `interval_s` for `duration_s`; every check must match. **Use for continuous invariants** — e.g., "after DELETE, GET must return 404 for 15 seconds". ONE tool call, no extra turns. Do NOT simulate this with sequential `http_call`s.
 - **`monitor_while`** — run a background monitor request while a foreground action executes, then keep monitoring briefly after the action. **Use for transient race/async invariants** where the bad state may appear only during another operation — e.g., monitor `GET /resource` while issuing `DELETE /resource`, or monitor an ownership boundary while another user mutates state.
-- **`record_event`** — write a forensic note to the audit log. Use for observations, warnings, or violations.
+- **`record_event`** — write a forensic note to the audit log. Use for observations, warnings, or violations. **Always pass a `title`: a short (≤10 words), unique slug that identifies this specific finding** (e.g. `"IDOR order sequential id"`, `"concurrent addItem lost write"`, `"500 on clear+pay race"`). The runtime deduplicates by title — if you call `record_event` with the same title twice, the second call is silently dropped and returns `{"recorded": false, "duplicate": true}`. Check `all_findings` in the ack before each call; if your finding is already listed, skip the call entirely.
 - **`remember_fact`** — pin a small reusable fact into compact memory. Use for values future Rs may need after earlier raw history is trimmed: ids, urls, session names, or other short handles. Do NOT store large bodies or full response payloads.
 - **`submit_verdict_for_R`** — record a per-R verdict (PASSED / FAILED / UNTESTABLE) with confidence and evidence. Call as soon as you have decisive evidence — ideally in the same turn as the probes. Call it again for the same R only when later evidence contradicts the earlier verdict.
 - **`submit_verdict`** — overall PASS/FAIL. Only accepted after all Required Rs have a recorded verdict.
