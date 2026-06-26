@@ -1,7 +1,5 @@
 # ChaosArena
 
-A product honorably owned by the CS 6650 Lab, Khoury College of Computer Sciences, Northeastern University.
-
 Specification-driven multi-agent orchestration framework for black-box REST API concurrency bug detection. ChaosArena generates required test scenarios from a natural-language service description, dispatches them to parallel batch executors with barrier-synchronized concurrency tools, and produces a structured bug report.
 
 ## Layout
@@ -101,28 +99,28 @@ python main.py --spec ../specs/tasktracker_v2.md \
 
 ### CLI Options
 
-| Flag | Description |
-|---|---|
-| `--spec <path>` | Path to an existing spec markdown file (mutually exclusive with `--nl-input`) |
-| `--nl-input <path>` | Path to a natural-language service description; drafts a spec first |
-| `--target <url>` | Base URL of the service under test (e.g., `http://localhost:8080`) |
-| `--run-id <name>` | Name for this run; controls all output filenames (default: UTC timestamp) |
-| `--multi-agent` | Use orchestrator to plan batches, run executors in parallel, aggregate verdicts |
-| `--max-turns <n>` | Maximum agent turns per run (default: 60) |
-| `--system-prompt <path>` | Custom batch executor system prompt file |
-| `--draft-only` | Draft the spec and exit without evaluation (requires `--nl-input`) |
-| `--no-interactive` | Skip all interactive prompts (spec trim, run confirmation) |
+| Flag                     | Description                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| `--spec <path>`          | Path to an existing spec markdown file (mutually exclusive with `--nl-input`)   |
+| `--nl-input <path>`      | Path to a natural-language service description; drafts a spec first             |
+| `--target <url>`         | Base URL of the service under test (e.g., `http://localhost:8080`)              |
+| `--run-id <name>`        | Name for this run; controls all output filenames (default: UTC timestamp)       |
+| `--multi-agent`          | Use orchestrator to plan batches, run executors in parallel, aggregate verdicts |
+| `--max-turns <n>`        | Maximum agent turns per run (default: 60)                                       |
+| `--system-prompt <path>` | Custom batch executor system prompt file                                        |
+| `--draft-only`           | Draft the spec and exit without evaluation (requires `--nl-input`)              |
+| `--no-interactive`       | Skip all interactive prompts (spec trim, run confirmation)                      |
 
 ## Output
 
 Each run produces three artifacts, all named by `--run-id`:
 
-| File | Location | Content |
-|---|---|---|
-| `<run-id>_spec.md` | `specs/` | Drafted spec (only with `--nl-input`) |
-| `run_<run-id>.json` | `trace/` | Full run trace: usage, per-batch costs, orchestration metadata |
-| `run_<run-id>_messages.json` | `trace/` | Raw LLM message history |
-| `<run-id>_verdict.md` | `Verdict/` | Final structured verdict report |
+| File                         | Location   | Content                                                        |
+| ---------------------------- | ---------- | -------------------------------------------------------------- |
+| `<run-id>_spec.md`           | `specs/`   | Drafted spec (only with `--nl-input`)                          |
+| `run_<run-id>.json`          | `trace/`   | Full run trace: usage, per-batch costs, orchestration metadata |
+| `run_<run-id>_messages.json` | `trace/`   | Raw LLM message history                                        |
+| `<run-id>_verdict.md`        | `Verdict/` | Final structured verdict report                                |
 
 ## Architecture
 
@@ -142,32 +140,32 @@ All tuneable parameters are in [`agent/config/config.py`](agent/config/config.py
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|---|---|---|
-| `LLM_BACKEND` | LLM provider: `bedrock` or `direct` | `bedrock` |
-| `MODEL_ID` | Override the model ID | `us.anthropic.claude-sonnet-4-6` (Bedrock) / `claude-sonnet-4-6` (Direct) |
-| `AWS_PROFILE` | AWS SSO profile (Bedrock only) | — |
-| `AWS_REGION` | AWS region (Bedrock only) | `us-west-2` |
-| `ANTHROPIC_API_KEY` | Anthropic API key (Direct only) | — |
-| `BUG_MODE` | Stub server bug injection mode (e.g., `race`) | disabled |
+| Variable            | Description                                   | Default                                                                   |
+| ------------------- | --------------------------------------------- | ------------------------------------------------------------------------- |
+| `LLM_BACKEND`       | LLM provider: `bedrock` or `direct`           | `bedrock`                                                                 |
+| `MODEL_ID`          | Override the model ID                         | `us.anthropic.claude-sonnet-4-6` (Bedrock) / `claude-sonnet-4-6` (Direct) |
+| `AWS_PROFILE`       | AWS SSO profile (Bedrock only)                | —                                                                         |
+| `AWS_REGION`        | AWS region (Bedrock only)                     | `us-west-2`                                                               |
+| `ANTHROPIC_API_KEY` | Anthropic API key (Direct only)               | —                                                                         |
+| `BUG_MODE`          | Stub server bug injection mode (e.g., `race`) | disabled                                                                  |
 
 ### Runtime Parameters
 
-| Parameter | Value | Description |
-|---|---|---|
-| `DEFAULT_MAX_TURNS` | 60 | Default turn budget per evaluation run |
-| `MAX_TOKENS` | 8192 | Max output tokens per LLM call |
-| `TEMPERATURE` | 0.0 | Sampling temperature (locked for reproducibility) |
-| `DEFAULT_R_ESTIMATED_TURNS` | 3 | Fallback per-R turn estimate when not specified in spec |
+| Parameter                   | Value | Description                                             |
+| --------------------------- | ----- | ------------------------------------------------------- |
+| `DEFAULT_MAX_TURNS`         | 60    | Default turn budget per evaluation run                  |
+| `MAX_TOKENS`                | 8192  | Max output tokens per LLM call                          |
+| `TEMPERATURE`               | 0.0   | Sampling temperature (locked for reproducibility)       |
+| `DEFAULT_R_ESTIMATED_TURNS` | 3     | Fallback per-R turn estimate when not specified in spec |
 
 ### Pricing (2026-Q2, Sonnet 4.6)
 
-| Token Type | Cost per 1M tokens |
-|---|---|
-| Input | $3.00 |
-| Output | $15.00 |
-| Cache creation | $3.75 |
-| Cache read | $0.30 |
+| Token Type     | Cost per 1M tokens |
+| -------------- | ------------------ |
+| Input          | $3.00              |
+| Output         | $15.00             |
+| Cache creation | $3.75              |
+| Cache read     | $0.30              |
 
 ## License
 
