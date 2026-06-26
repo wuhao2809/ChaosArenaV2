@@ -1,0 +1,1374 @@
+{
+  "run_id": "0615-tracking-chaosarena",
+  "eval_mode": "orchestrated_cover_all",
+  "verdict": "FAIL",
+  "reasoning": "Multi-agent orchestration aggregate verdict.\n\nBatch results:\n- batch01_R1-R1 (R1): FAIL, covered 1/1, turns=6, tools=11\n- batch02_R2-R2 (R2): FAIL, covered 1/1, turns=7, tools=8\n- batch03_R3-R3 (R3): PASS, covered 1/1, turns=7, tools=12\n- batch04_R4-R4 (R4): FAIL, covered 1/1, turns=7, tools=10\n- batch05_R5-R6 (R5, R6): FAIL, covered 2/2, turns=5, tools=15\n- batch06_R7-R8 (R7, R8): FAIL, covered 2/2, turns=8, tools=21\n- batch07_R9-R11 (R9, R10, R11): FAIL, covered 3/3, turns=9, tools=24\n- batch08_R12-R14 (R12, R13, R14): PASS, covered 3/3, turns=2, tools=14\n- batch09_R15-R18 (R15, R16, R17, R18): FAIL, covered 4/4, turns=9, tools=31\n- exploration (): FAIL, covered 0/0, turns=27, tools=46\n\nRequired coverage: 18/18.\nMissing Rs: none.\nFailed Rs: ['R1', 'R2', 'R4', 'R5', 'R6', 'R8', 'R7', 'R11', 'R9', 'R10', 'R15', 'R16'].",
+  "required_ids": [
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6",
+    "R7",
+    "R8",
+    "R9",
+    "R10",
+    "R11",
+    "R12",
+    "R13",
+    "R14",
+    "R15",
+    "R16",
+    "R17",
+    "R18"
+  ],
+  "r_verdicts": {
+    "R1": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Concurrent POST /api/assignments/save with identical body {employeeId:3, projectId:1, commitDate:\"15-06-202609:00:00\"} (n=2, barrier-released): one returned 200, the other returned 400 BAD_REQUEST (not 409 Conflict). The 400 response leaked a raw SQL constraint violation: \"could not execute statement; SQL [n/a]; constraint [PUBLIC.PRIMARY_KEY_E ON PUBLIC.ASSIGNMENTS...]; nested exception is org.hibernate.exception.ConstraintViolationException\". The spec requires exactly one 200/201 and one 409 Conflict. The service returns 400 instead of 409, and exposes internal SQL/Hibernate error details in the response body. No 500 was observed and no duplicate record was created (DB constraint prevented it), but the error code and error message format are both wrong.",
+      "turn": 6,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Concurrent POST /api/assignments/save with identical body {employeeId:3, projectId:1, commitDate:\"15-06-202609:00:00\"} (n=2, barrier-released): one returned 200, the other returned 400 BAD_REQUEST (not 409 Conflict). The 400 response leaked a raw SQL constraint violation: \"could not execute statement; SQL [n/a]; constraint [PUBLIC.PRIMARY_KEY_E ON PUBLIC.ASSIGNMENTS...]; nested exception is org.hibernate.exception.ConstraintViolationException\". The spec requires exactly one 200/201 and one 409 Conflict. The service returns 400 instead of 409, and exposes internal SQL/Hibernate error details in the response body. No 500 was observed and no duplicate record was created (DB constraint prevented it), but the error code and error message format are both wrong.",
+          "turn": 6,
+          "amended": false
+        }
+      ]
+    },
+    "R2": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Two concurrent DELETE /api/assignments/3/1/15-06-202600:00:00 were issued via race_pair (barrier skew 1263µs). action_b returned 200 (correct). action_a returned 400 BAD_REQUEST with body: \"Batch update returned unexpected row count from update [0]; actual row count: 0; expected: 1; statement executed: delete from assignments... nested exception is org.hibernate.StaleStateException\". The spec requires the second DELETE to return 404 (not found). Instead the service leaks a Hibernate StaleStateException as a 400 error. No 500 was returned, but 400 is not the required 404. The assignment was deleted exactly once (no double-delete side effect), but the error code contract is violated.",
+      "turn": 7,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Two concurrent DELETE /api/assignments/3/1/15-06-202600:00:00 were issued via race_pair (barrier skew 1263µs). action_b returned 200 (correct). action_a returned 400 BAD_REQUEST with body: \"Batch update returned unexpected row count from update [0]; actual row count: 0; expected: 1; statement executed: delete from assignments... nested exception is org.hibernate.StaleStateException\". The spec requires the second DELETE to return 404 (not found). Instead the service leaks a Hibernate StaleStateException as a 400 error. No 500 was returned, but 400 is not the required 404. The assignment was deleted exactly once (no double-delete side effect), but the error code contract is violated.",
+          "turn": 7,
+          "amended": false
+        }
+      ]
+    },
+    "R3": {
+      "verdict": "PASSED",
+      "confidence": "MEDIUM",
+      "evidence": "Race test: concurrent DELETE /api/projects/18 vs POST /api/assignments/save (referencing projectId=18). DELETE returned 200 (delete won), assignment POST returned 400 with FK constraint violation message: \"could not execute statement; SQL [n/a]; constraint [FK1_ASSIGN]; nested exception is org.hibernate.exception.ConstraintViolationException\". No 500 was produced. The database FK constraint prevented the orphan assignment from being created. The system returned 400 (BAD_REQUEST) rather than 500, satisfying the spec requirement that \"either the delete wins (commit POST returns 404 or 409, not 500)\". While the spec preferred 404/409 over 400, the critical requirement was \"not 500\" and \"no orphan assignment row\" — both were satisfied. The FK constraint at the DB level prevented the orphan row.",
+      "turn": 7,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "MEDIUM",
+          "evidence": "Race test: concurrent DELETE /api/projects/18 vs POST /api/assignments/save (referencing projectId=18). DELETE returned 200 (delete won), assignment POST returned 400 with FK constraint violation message: \"could not execute statement; SQL [n/a]; constraint [FK1_ASSIGN]; nested exception is org.hibernate.exception.ConstraintViolationException\". No 500 was produced. The database FK constraint prevented the orphan assignment from being created. The system returned 400 (BAD_REQUEST) rather than 500, satisfying the spec requirement that \"either the delete wins (commit POST returns 404 or 409, not 500)\". While the spec preferred 404/409 over 400, the critical requirement was \"not 500\" and \"no orphan assignment row\" — both were satisfied. The FK constraint at the DB level prevented the orphan row.",
+          "turn": 7,
+          "amended": false
+        }
+      ]
+    },
+    "R4": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Two concurrent PUT /api/assignments/update requests targeting the same assignment (employeeId=3, projectId=1, commitDate=\"01-01-202400:00:00\") — one with commitEmpDesc='v2', one with 'v3'. Result: action_b (v3) returned HTTP 200 with commitEmpDesc='v3'; action_a (v2) returned HTTP 400 with a ConstraintViolationException: \"insert into assignments ... [23505-200]\". The PUT/update endpoint is performing an INSERT rather than an UPDATE, causing a primary key constraint violation on the concurrent request. The spec requires both concurrent PUTs to complete without errors (no 500s, and implicitly both should be valid update operations), with the final state being exactly one of v2 or v3. While no 500 was returned and the final GET shows 'v3' (a valid value), one of the two concurrent update requests failed with a 400 error — indicating the update endpoint is fundamentally broken (does INSERT not UPDATE), violating the expected behavior that both concurrent writes should be valid update operations.",
+      "turn": 7,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Two concurrent PUT /api/assignments/update requests targeting the same assignment (employeeId=3, projectId=1, commitDate=\"01-01-202400:00:00\") — one with commitEmpDesc='v2', one with 'v3'. Result: action_b (v3) returned HTTP 200 with commitEmpDesc='v3'; action_a (v2) returned HTTP 400 with a ConstraintViolationException: \"insert into assignments ... [23505-200]\". The PUT/update endpoint is performing an INSERT rather than an UPDATE, causing a primary key constraint violation on the concurrent request. The spec requires both concurrent PUTs to complete without errors (no 500s, and implicitly both should be valid update operations), with the final state being exactly one of v2 or v3. While no 500 was returned and the final GET shows 'v3' (a valid value), one of the two concurrent update requests failed with a 400 error — indicating the update endpoint is fundamentally broken (does INSERT not UPDATE), violating the expected behavior that both concurrent writes should be valid update operations.",
+          "turn": 7,
+          "amended": false
+        }
+      ]
+    },
+    "R5": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "GET /api/assignments/3/4/13-12-202019:55:14 returns HTTP 200 with full assignment data (commitEmpDesc=\"init\", commitMgrDesc, employee salary=5000.0, credential hash) for employeeId=3 with NO authentication at all. The endpoint requires no session, no JWT, no credentials. Any unauthenticated request (let alone Employee B) can read Employee A's assignment commits. Spec requires 403 or 404 for cross-employee access.",
+      "turn": 5,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "GET /api/assignments/3/4/13-12-202019:55:14 returns HTTP 200 with full assignment data (commitEmpDesc=\"init\", commitMgrDesc, employee salary=5000.0, credential hash) for employeeId=3 with NO authentication at all. The endpoint requires no session, no JWT, no credentials. Any unauthenticated request (let alone Employee B) can read Employee A's assignment commits. Spec requires 403 or 404 for cross-employee access.",
+          "turn": 5,
+          "amended": false
+        }
+      ]
+    },
+    "R6": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "GET /api/employees/3 returns HTTP 200 with full employee profile including salary=5000.0, email=\"springabcxyzboot@gmail.com\", phone=\"22125144\", and embedded credential reference (credentialId=1, username=\"imentouk\", hashed password, role=\"ROLE_EMP\") with NO authentication. Any unauthenticated request can read any employee's sensitive profile data. Spec requires 403 or 404 for cross-employee access.",
+      "turn": 5,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "GET /api/employees/3 returns HTTP 200 with full employee profile including salary=5000.0, email=\"springabcxyzboot@gmail.com\", phone=\"22125144\", and embedded credential reference (credentialId=1, username=\"imentouk\", hashed password, role=\"ROLE_EMP\") with NO authentication. Any unauthenticated request can read any employee's sensitive profile data. Spec requires 403 or 404 for cross-employee access.",
+          "turn": 5,
+          "amended": false
+        }
+      ]
+    },
+    "R8": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "All three credential endpoints return full credential data without any authentication:\n1. GET /api/credentials → 200 with all 14 credentials including password hashes, roles, enabled flags (no auth required)\n2. GET /api/credentials/1 → 200 with full credential record including bcrypt hash, role \"ROLE_EMP\", enabled=true (no auth required)\n3. GET /api/credentials/username/imentouk → 200 with full credential record (no auth required)\nThe spec requires non-admin users get 403 Forbidden. Instead, these endpoints are completely unprotected — even unauthenticated requests return 200 with sensitive data.",
+      "turn": 8,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "All three credential endpoints return full credential data without any authentication:\n1. GET /api/credentials → 200 with all 14 credentials including password hashes, roles, enabled flags (no auth required)\n2. GET /api/credentials/1 → 200 with full credential record including bcrypt hash, role \"ROLE_EMP\", enabled=true (no auth required)\n3. GET /api/credentials/username/imentouk → 200 with full credential record (no auth required)\nThe spec requires non-admin users get 403 Forbidden. Instead, these endpoints are completely unprotected — even unauthenticated requests return 200 with sensitive data.",
+          "turn": 8,
+          "amended": false
+        }
+      ]
+    },
+    "R7": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Project mutation endpoints have no authentication/authorization enforcement. Unauthenticated requests (no session, no token) to POST /api/projects/save, PUT /api/projects/update, and DELETE /api/projects/9901 all return 400 (validation errors or \"NO Project object FOUND\") rather than 401 or 403. The spec requires Employee-role users get 403 Forbidden. Since even completely unauthenticated requests are not blocked with 401/403, Employee-role users would also not receive 403. The authorization layer for project mutation is entirely absent — any caller (authenticated or not) can attempt project mutations without being rejected on authorization grounds.",
+      "turn": 8,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Project mutation endpoints have no authentication/authorization enforcement. Unauthenticated requests (no session, no token) to POST /api/projects/save, PUT /api/projects/update, and DELETE /api/projects/9901 all return 400 (validation errors or \"NO Project object FOUND\") rather than 401 or 403. The spec requires Employee-role users get 403 Forbidden. Since even completely unauthenticated requests are not blocked with 401/403, Employee-role users would also not receive 403. The authorization layer for project mutation is entirely absent — any caller (authenticated or not) can attempt project mutations without being rejected on authorization grounds.",
+          "turn": 8,
+          "amended": false
+        }
+      ]
+    },
+    "R11": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "GET /api/employees returned HTTP 200 with full employee data (14 records including credentials/hashed passwords) without any authentication. GET /api/projects returned HTTP 200 with 12 projects. GET /api/assignments returned HTTP 200 with 30+ assignment records. All three collection endpoints are completely unprotected — no 401 is returned for unauthenticated requests.",
+      "turn": 4,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "GET /api/employees returned HTTP 200 with full employee data (14 records including credentials/hashed passwords) without any authentication. GET /api/projects returned HTTP 200 with 12 projects. GET /api/assignments returned HTTP 200 with 30+ assignment records. All three collection endpoints are completely unprotected — no 401 is returned for unauthenticated requests.",
+          "turn": 4,
+          "amended": false
+        }
+      ]
+    },
+    "R9": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "PUT /api/credentials/update with body {credentialId:1, role:\"ROLE_MGR\"} (for employee user \"imentouk\") returned HTTP 200 with the updated credential showing role=\"ROLE_MGR\". The role was successfully escalated from ROLE_EMP to ROLE_MGR without any authentication or authorization check. The spec requires 403 Forbidden. The endpoint accepted the role escalation with no session/token required at all.",
+      "turn": 9,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "PUT /api/credentials/update with body {credentialId:1, role:\"ROLE_MGR\"} (for employee user \"imentouk\") returned HTTP 200 with the updated credential showing role=\"ROLE_MGR\". The role was successfully escalated from ROLE_EMP to ROLE_MGR without any authentication or authorization check. The spec requires 403 Forbidden. The endpoint accepted the role escalation with no session/token required at all.",
+          "turn": 9,
+          "amended": false
+        }
+      ]
+    },
+    "R10": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "GET /api/employees/data/manager-project-data/9 (manager John Doe's data) returned HTTP 200 with full manager project list (4 projects including titles, dates, IDs, statuses) without any authentication. The spec requires 403 or 404 when an unauthorized employee accesses another employee's manager-project-data. Since the endpoint is completely unauthenticated, any client (including Employee A) can access Employee B's manager project data freely.",
+      "turn": 9,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "GET /api/employees/data/manager-project-data/9 (manager John Doe's data) returned HTTP 200 with full manager project list (4 projects including titles, dates, IDs, statuses) without any authentication. The spec requires 403 or 404 when an unauthorized employee accesses another employee's manager-project-data. Since the endpoint is completely unauthenticated, any client (including Employee A) can access Employee B's manager project data freely.",
+          "turn": 9,
+          "amended": false
+        }
+      ]
+    },
+    "R12": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "GET /api/assignments/1/1/not-a-date → 400 {\"msg\":\"Text 'not-a-date' could not be parsed at index 0\",\"status\":\"BAD_REQUEST\"}. GET /api/assignments/1/1/99-99-9999HH:mm:ss → 400 {\"msg\":\"Text '99-99-9999HH:mm:ss' could not be parsed at index 10\",\"status\":\"BAD_REQUEST\"}. DELETE /api/assignments/1/1/not-a-date → 400 with same parse error. No 500, no NPE stack trace, no silent 200 in any case.",
+      "turn": 2,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "GET /api/assignments/1/1/not-a-date → 400 {\"msg\":\"Text 'not-a-date' could not be parsed at index 0\",\"status\":\"BAD_REQUEST\"}. GET /api/assignments/1/1/99-99-9999HH:mm:ss → 400 {\"msg\":\"Text '99-99-9999HH:mm:ss' could not be parsed at index 10\",\"status\":\"BAD_REQUEST\"}. DELETE /api/assignments/1/1/not-a-date → 400 with same parse error. No 500, no NPE stack trace, no silent 200 in any case.",
+          "turn": 2,
+          "amended": false
+        }
+      ]
+    },
+    "R13": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "GET /api/assignments/abc/1/... → 400 {\"msg\":\"For input string: \\\"abc\\\"\"}. GET /api/assignments/-1/1/... → 400 {\"msg\":\"###### NO Assignment object FOUND! ######\"}. GET /api/assignments/1/0/... → 400 same message. GET /api/employees/2147483648 → 400 {\"msg\":\"For input string: \\\"2147483648\\\"\"}. All cases return 400, no 500, no silent misrouting.",
+      "turn": 2,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "GET /api/assignments/abc/1/... → 400 {\"msg\":\"For input string: \\\"abc\\\"\"}. GET /api/assignments/-1/1/... → 400 {\"msg\":\"###### NO Assignment object FOUND! ######\"}. GET /api/assignments/1/0/... → 400 same message. GET /api/employees/2147483648 → 400 {\"msg\":\"For input string: \\\"2147483648\\\"\"}. All cases return 400, no 500, no silent misrouting.",
+          "turn": 2,
+          "amended": false
+        }
+      ]
+    },
+    "R14": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "GET /api/credentials/username/' OR '1'='1 → 400 {\"msg\":\"###### NO Credential object FOUND with username: ' OR '1'='1 ! ######\"}. GET /api/credentials/username/admin'-- → 400 same pattern. GET /api/credentials/username/<script>alert(1)</script> → 400 (HTML error page, no data). DELETE /api/credentials/username/' OR '1'='1 → 400. No credential records returned, no 500, no stack trace revealing query/table structure.",
+      "turn": 2,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "GET /api/credentials/username/' OR '1'='1 → 400 {\"msg\":\"###### NO Credential object FOUND with username: ' OR '1'='1 ! ######\"}. GET /api/credentials/username/admin'-- → 400 same pattern. GET /api/credentials/username/<script>alert(1)</script> → 400 (HTML error page, no data). DELETE /api/credentials/username/' OR '1'='1 → 400. No credential records returned, no 500, no stack trace revealing query/table structure.",
+          "turn": 2,
+          "amended": false
+        }
+      ]
+    },
+    "R15": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "POST /api/projects/save with startDate='31-12-2025' and endDate='01-01-2025' (end before start) returned HTTP 200 with body {\"projectId\": 20, \"title\": \"Test Project R15\", \"startDate\": \"31-12-2025\", \"endDate\": \"01-01-2025\", \"status\": \"ACTIVE\"}. The logically invalid date range was silently accepted and persisted. Expected: 400 Bad Request.",
+      "turn": 9,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "POST /api/projects/save with startDate='31-12-2025' and endDate='01-01-2025' (end before start) returned HTTP 200 with body {\"projectId\": 20, \"title\": \"Test Project R15\", \"startDate\": \"31-12-2025\", \"endDate\": \"01-01-2025\", \"status\": \"ACTIVE\"}. The logically invalid date range was silently accepted and persisted. Expected: 400 Bad Request.",
+          "turn": 9,
+          "amended": false
+        }
+      ]
+    },
+    "R16": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "POST /api/credentials/save with role='SUPERADMIN' returned 200 OK, storing the credential with credentialId=16. POST /api/credentials/save with role='' also returned 200 OK with credentialId=17. Both invalid roles were accepted at save time without rejection. Authentication with these credentials returned 400 Bad credentials (likely due to plaintext password storage vs bcrypt comparison), so they cannot authenticate — but the spec requires either 400 at save time OR that undefined roles grant no access. The save-time acceptance of arbitrary roles (SUPERADMIN, empty string) violates the requirement that invalid roles be rejected at save time.",
+      "turn": 9,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "POST /api/credentials/save with role='SUPERADMIN' returned 200 OK, storing the credential with credentialId=16. POST /api/credentials/save with role='' also returned 200 OK with credentialId=17. Both invalid roles were accepted at save time without rejection. Authentication with these credentials returned 400 Bad credentials (likely due to plaintext password storage vs bcrypt comparison), so they cannot authenticate — but the spec requires either 400 at save time OR that undefined roles grant no access. The save-time acceptance of arbitrary roles (SUPERADMIN, empty string) violates the requirement that invalid roles be rejected at save time.",
+          "turn": 9,
+          "amended": false
+        }
+      ]
+    },
+    "R17": {
+      "verdict": "PASSED",
+      "confidence": "MEDIUM",
+      "evidence": "Multiple variants tested: (1) Empty JSON body {} → 400 with ConstraintViolationException (not 500); (2) Missing commitDate (body with employeeId+projectId only) → 400 with ConstraintViolationException; (3) employeeId=null → 400 with ConstraintViolationException; (4) Missing request body entirely → 400 \"Required request body is missing\". All variants returned 400, no 500 or NullPointerException observed. Note: FK constraint violations also return 400 (not 500), which is acceptable behavior.",
+      "turn": 9,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "MEDIUM",
+          "evidence": "Multiple variants tested: (1) Empty JSON body {} → 400 with ConstraintViolationException (not 500); (2) Missing commitDate (body with employeeId+projectId only) → 400 with ConstraintViolationException; (3) employeeId=null → 400 with ConstraintViolationException; (4) Missing request body entirely → 400 \"Required request body is missing\". All variants returned 400, no 500 or NullPointerException observed. Note: FK constraint violations also return 400 (not 500), which is acceptable behavior.",
+          "turn": 9,
+          "amended": false
+        }
+      ]
+    },
+    "R18": {
+      "verdict": "UNTESTABLE",
+      "confidence": "LOW",
+      "evidence": "Could not test R18 (oversize 100,000-character commitEmpDesc/commitMgrDesc) because no valid employee+project combination was available to construct a valid assignment body that would reach the text-field validation stage. All assignment save attempts failed at FK constraint level (no valid employeeId exists in the system). Without a valid base record, it is impossible to determine whether oversize text fields are rejected or silently truncated.",
+      "turn": 9,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "UNTESTABLE",
+          "confidence": "LOW",
+          "evidence": "Could not test R18 (oversize 100,000-character commitEmpDesc/commitMgrDesc) because no valid employee+project combination was available to construct a valid assignment body that would reach the text-field validation stage. All assignment save attempts failed at FK constraint level (no valid employeeId exists in the system). Without a valid base record, it is impossible to determine whether oversize text fields are rejected or silently truncated.",
+          "turn": 9,
+          "amended": false
+        }
+      ]
+    }
+  },
+  "r_missing": [],
+  "tool_counts": {
+    "http_call": 116,
+    "http_call_with_session": 38,
+    "submit_verdict_for_R": 18,
+    "record_event": 14,
+    "race_pair": 3,
+    "parallel_n": 1,
+    "remember_fact": 1,
+    "submit_verdict": 1
+  },
+  "usage": {
+    "input_tokens": 603328,
+    "output_tokens": 75453,
+    "cache_creation_input_tokens": 82229,
+    "cache_read_input_tokens": 693538,
+    "cost_usd": 3.458199,
+    "pricing_version": "2026-Q2",
+    "coordinator": [
+      {
+        "phase": "initial_batch_plan",
+        "input_tokens": 4502,
+        "output_tokens": 870,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cost_usd": 0.026556,
+        "model": "us.anthropic.claude-sonnet-4-6",
+        "raw_response": "{\n  \"batches\": [\n    {\n      \"r_ids\": [\"R1\"],\n      \"rationale\": \"Race condition: duplicate concurrent POST to create the same assignment. Standalone because it needs its own setup (employee + project + assignment slot) and the concurrent barrier logic is complex enough to consume its full 3-turn budget alone.\"\n    },\n    {\n      \"r_ids\": [\"R2\"],\n      \"rationale\": \"Race condition: concurrent DELETE of the same assignment. Needs its own pre-existing assignment record; keeping it separate from R1 avoids state collision and lets it use its full 3-turn budget for the parallel delete probe.\"\n    },\n    {\n      \"r_ids\": [\"R3\"],\n      \"rationale\": \"Race condition: project delete vs concurrent assignment commit POST. The most complex race (4 turns), involves two different resource types (project + assignment) racing. Isolated in its own batch to stay within the hard cap and avoid interference.\"\n    },\n    {\n      \"r_ids\": [\"R4\"],\n      \"rationale\": \"Race condition: concurrent PUT to the same assignment (lost-write check). Needs a pre-existing assignment with a known commitEmpDesc; isolated so the concurrent PUT barrier gets the full 3-turn budget without sharing setup with other race Rs.\"\n    },\n    {\n      \"r_ids\": [\"R5\", \"R6\"],\n      \"rationale\": \"Authorization / IDOR: both test cross-employee read access — R5 targets assignment commits, R6 targets employee profile/salary. Both require two authenticated sessions (Employee A and Employee B) and are 2 turns each (total 4), well with... [truncated, 3087 chars total]",
+        "planned_batches": [
+          [
+            "R1"
+          ],
+          [
+            "R2"
+          ],
+          [
+            "R3"
+          ],
+          [
+            "R4"
+          ],
+          [
+            "R5",
+            "R6"
+          ],
+          [
+            "R7",
+            "R8"
+          ],
+          [
+            "R9",
+            "R10",
+            "R11"
+          ],
+          [
+            "R12",
+            "R13",
+            "R14"
+          ],
+          [
+            "R15",
+            "R16",
+            "R17",
+            "R18"
+          ]
+        ]
+      },
+      {
+        "phase": "api_discovery",
+        "input_tokens": 3622,
+        "output_tokens": 919,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cost_usd": 0.024651,
+        "model": "us.anthropic.claude-sonnet-4-6",
+        "raw_response": "{\n  \"endpoints\": [\n    {\"method\": \"POST\", \"path\": \"/api/authenticate\", \"purpose\": \"authenticate user and establish session or return token\"},\n    {\"method\": \"GET\", \"path\": \"/api/assignments\", \"purpose\": \"list all assignments\"},\n    {\"method\": \"POST\", \"path\": \"/api/assignments\", \"purpose\": \"create assignment (alias of /save)\"},\n    {\"method\": \"POST\", \"path\": \"/api/assignments/save\", \"purpose\": \"create assignment\"},\n    {\"method\": \"PUT\", \"path\": \"/api/assignments/update\", \"purpose\": \"update assignment by composite key\"},\n    {\"method\": \"GET\", \"path\": \"/api/assignments/{employeeId}/{projectId}\", \"purpose\": \"list assignments for employee+project\"},\n    {\"method\": \"GET\", \"path\": \"/api/assignments/{employeeId}/{projectId}/{commitDate}\", \"purpose\": \"get single assignment by composite key\"},\n    {\"method\": \"DELETE\", \"path\": \"/api/assignments/{employeeId}/{projectId}/{commitDate}\", \"purpose\": \"delete assignment by composite key\"},\n    {\"method\": \"DELETE\", \"path\": \"/api/assignments/delete/{employeeId}/{projectId}/{commitDate}\", \"purpose\": \"delete assignment by composite key (alias)\"},\n    {\"method\": \"GET\", \"path\": \"/api/projects\", \"purpose\": \"list all projects\"},\n    {\"method\": \"POST\", \"path\": \"/api/projects\", \"purpose\": \"create project (alias of /save)\"},\n    {\"method\": \"POST\", \"path\": \"/api/projects/save\", \"purpose\": \"create project\"},\n    {\"method\": \"PUT\", \"path\": \"/api/projects/update\", \"purpose\": \"update project\"},\n    {\"method\": \"DELETE\", \"path\": \"/api/projects/{projectId}\", \"pur... [truncated, 3392 chars total]"
+      }
+    ],
+    "per_batch": [
+      {
+        "batch": "batch01_R1-R1",
+        "r_ids": [
+          "R1"
+        ],
+        "usage": {
+          "input_tokens": 33402,
+          "output_tokens": 1556,
+          "cache_creation_input_tokens": 9264,
+          "cache_read_input_tokens": 46320,
+          "cost_usd": 0.172182,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 278,
+              "cache_creation_input_tokens": 9264,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 5883,
+              "output_tokens": 214,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9264
+            },
+            {
+              "turn": 3,
+              "input_tokens": 6287,
+              "output_tokens": 252,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9264
+            },
+            {
+              "turn": 4,
+              "input_tokens": 6750,
+              "output_tokens": 132,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9264
+            },
+            {
+              "turn": 5,
+              "input_tokens": 6912,
+              "output_tokens": 202,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9264
+            },
+            {
+              "turn": 6,
+              "input_tokens": 7540,
+              "output_tokens": 478,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9264
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch02_R2-R2",
+        "r_ids": [
+          "R2"
+        ],
+        "usage": {
+          "input_tokens": 31656,
+          "output_tokens": 1233,
+          "cache_creation_input_tokens": 9227,
+          "cache_read_input_tokens": 55362,
+          "cost_usd": 0.164673,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 138,
+              "cache_creation_input_tokens": 9227,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 229,
+              "output_tokens": 73,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9227
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1557,
+              "output_tokens": 187,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9227
+            },
+            {
+              "turn": 4,
+              "input_tokens": 6661,
+              "output_tokens": 98,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9227
+            },
+            {
+              "turn": 5,
+              "input_tokens": 7363,
+              "output_tokens": 163,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9227
+            },
+            {
+              "turn": 6,
+              "input_tokens": 7658,
+              "output_tokens": 149,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9227
+            },
+            {
+              "turn": 7,
+              "input_tokens": 8158,
+              "output_tokens": 425,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9227
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch03_R3-R3",
+        "r_ids": [
+          "R3"
+        ],
+        "usage": {
+          "input_tokens": 39623,
+          "output_tokens": 1700,
+          "cache_creation_input_tokens": 9252,
+          "cache_read_input_tokens": 55512,
+          "cost_usd": 0.195718,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 212,
+              "cache_creation_input_tokens": 9252,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 5177,
+              "output_tokens": 256,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9252
+            },
+            {
+              "turn": 3,
+              "input_tokens": 5640,
+              "output_tokens": 191,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9252
+            },
+            {
+              "turn": 4,
+              "input_tokens": 6558,
+              "output_tokens": 279,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9252
+            },
+            {
+              "turn": 5,
+              "input_tokens": 7054,
+              "output_tokens": 184,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9252
+            },
+            {
+              "turn": 6,
+              "input_tokens": 7418,
+              "output_tokens": 188,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9252
+            },
+            {
+              "turn": 7,
+              "input_tokens": 7746,
+              "output_tokens": 390,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9252
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch04_R4-R4",
+        "r_ids": [
+          "R4"
+        ],
+        "usage": {
+          "input_tokens": 42357,
+          "output_tokens": 1866,
+          "cache_creation_input_tokens": 9349,
+          "cache_read_input_tokens": 56094,
+          "cost_usd": 0.206948,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 279,
+              "cache_creation_input_tokens": 9349,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 5267,
+              "output_tokens": 211,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9349
+            },
+            {
+              "turn": 3,
+              "input_tokens": 6206,
+              "output_tokens": 186,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9349
+            },
+            {
+              "turn": 4,
+              "input_tokens": 6487,
+              "output_tokens": 227,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9349
+            },
+            {
+              "turn": 5,
+              "input_tokens": 7440,
+              "output_tokens": 255,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9349
+            },
+            {
+              "turn": 6,
+              "input_tokens": 8071,
+              "output_tokens": 145,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9349
+            },
+            {
+              "turn": 7,
+              "input_tokens": 8856,
+              "output_tokens": 563,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9349
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch05_R5-R6",
+        "r_ids": [
+          "R5",
+          "R6"
+        ],
+        "usage": {
+          "input_tokens": 70690,
+          "output_tokens": 2004,
+          "cache_creation_input_tokens": 9362,
+          "cache_read_input_tokens": 37448,
+          "cost_usd": 0.288472,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 33,
+              "output_tokens": 169,
+              "cache_creation_input_tokens": 9362,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 6331,
+              "output_tokens": 392,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9362
+            },
+            {
+              "turn": 3,
+              "input_tokens": 7022,
+              "output_tokens": 340,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9362
+            },
+            {
+              "turn": 4,
+              "input_tokens": 27879,
+              "output_tokens": 337,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9362
+            },
+            {
+              "turn": 5,
+              "input_tokens": 29425,
+              "output_tokens": 766,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9362
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch06_R7-R8",
+        "r_ids": [
+          "R7",
+          "R8"
+        ],
+        "usage": {
+          "input_tokens": 24876,
+          "output_tokens": 3071,
+          "cache_creation_input_tokens": 9351,
+          "cache_read_input_tokens": 65457,
+          "cost_usd": 0.175396,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 33,
+              "output_tokens": 390,
+              "cache_creation_input_tokens": 9351,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 733,
+              "output_tokens": 206,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9351
+            },
+            {
+              "turn": 3,
+              "input_tokens": 2320,
+              "output_tokens": 409,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9351
+            },
+            {
+              "turn": 4,
+              "input_tokens": 2977,
+              "output_tokens": 352,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9351
+            },
+            {
+              "turn": 5,
+              "input_tokens": 3621,
+              "output_tokens": 308,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9351
+            },
+            {
+              "turn": 6,
+              "input_tokens": 4140,
+              "output_tokens": 391,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9351
+            },
+            {
+              "turn": 7,
+              "input_tokens": 5080,
+              "output_tokens": 303,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9351
+            },
+            {
+              "turn": 8,
+              "input_tokens": 5972,
+              "output_tokens": 712,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9351
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch07_R9-R11",
+        "r_ids": [
+          "R9",
+          "R10",
+          "R11"
+        ],
+        "usage": {
+          "input_tokens": 60477,
+          "output_tokens": 2982,
+          "cache_creation_input_tokens": 9489,
+          "cache_read_input_tokens": 75912,
+          "cost_usd": 0.284518,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 36,
+              "output_tokens": 325,
+              "cache_creation_input_tokens": 9489,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 1967,
+              "output_tokens": 338,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9489
+            },
+            {
+              "turn": 3,
+              "input_tokens": 8199,
+              "output_tokens": 366,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9489
+            },
+            {
+              "turn": 4,
+              "input_tokens": 30200,
+              "output_tokens": 546,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9489
+            },
+            {
+              "turn": 5,
+              "input_tokens": 199,
+              "output_tokens": 227,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9489
+            },
+            {
+              "turn": 6,
+              "input_tokens": 1016,
+              "output_tokens": 210,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9489
+            },
+            {
+              "turn": 7,
+              "input_tokens": 1817,
+              "output_tokens": 159,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9489
+            },
+            {
+              "turn": 8,
+              "input_tokens": 8105,
+              "output_tokens": 379,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9489
+            },
+            {
+              "turn": 9,
+              "input_tokens": 8938,
+              "output_tokens": 432,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9489
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch08_R12-R14",
+        "r_ids": [
+          "R12",
+          "R13",
+          "R14"
+        ],
+        "usage": {
+          "input_tokens": 1983,
+          "output_tokens": 1522,
+          "cache_creation_input_tokens": 9541,
+          "cache_read_input_tokens": 9541,
+          "cost_usd": 0.06742,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 36,
+              "output_tokens": 810,
+              "cache_creation_input_tokens": 9541,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 1947,
+              "output_tokens": 712,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9541
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch09_R15-R18",
+        "r_ids": [
+          "R15",
+          "R16",
+          "R17",
+          "R18"
+        ],
+        "usage": {
+          "input_tokens": 36420,
+          "output_tokens": 51217,
+          "cache_creation_input_tokens": 4556,
+          "cache_read_input_tokens": 81862,
+          "cost_usd": 0.919159,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 39,
+              "output_tokens": 597,
+              "cache_creation_input_tokens": 4556,
+              "cache_read_input_tokens": 5046
+            },
+            {
+              "turn": 2,
+              "input_tokens": 1547,
+              "output_tokens": 579,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9602
+            },
+            {
+              "turn": 3,
+              "input_tokens": 2870,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9602
+            },
+            {
+              "turn": 4,
+              "input_tokens": 3746,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9602
+            },
+            {
+              "turn": 5,
+              "input_tokens": 4600,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9602
+            },
+            {
+              "turn": 6,
+              "input_tokens": 5293,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9602
+            },
+            {
+              "turn": 7,
+              "input_tokens": 5719,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9602
+            },
+            {
+              "turn": 8,
+              "input_tokens": 6148,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9602
+            },
+            {
+              "turn": 9,
+              "input_tokens": 6458,
+              "output_tokens": 889,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 9602
+            }
+          ]
+        }
+      },
+      {
+        "batch": "exploration",
+        "r_ids": [],
+        "usage": {
+          "input_tokens": 253720,
+          "output_tokens": 6513,
+          "cache_creation_input_tokens": 2838,
+          "cache_read_input_tokens": 210030,
+          "cost_usd": 0.932506,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 39,
+              "output_tokens": 194,
+              "cache_creation_input_tokens": 2838,
+              "cache_read_input_tokens": 5046
+            },
+            {
+              "turn": 2,
+              "input_tokens": 452,
+              "output_tokens": 73,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 3,
+              "input_tokens": 5277,
+              "output_tokens": 300,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 4,
+              "input_tokens": 5968,
+              "output_tokens": 150,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 5,
+              "input_tokens": 6142,
+              "output_tokens": 271,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 6,
+              "input_tokens": 6626,
+              "output_tokens": 249,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 7,
+              "input_tokens": 7088,
+              "output_tokens": 342,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 8,
+              "input_tokens": 7741,
+              "output_tokens": 201,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 9,
+              "input_tokens": 7966,
+              "output_tokens": 167,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 10,
+              "input_tokens": 8157,
+              "output_tokens": 295,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 11,
+              "input_tokens": 8784,
+              "output_tokens": 181,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 12,
+              "input_tokens": 8989,
+              "output_tokens": 160,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 13,
+              "input_tokens": 9173,
+              "output_tokens": 348,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 14,
+              "input_tokens": 10042,
+              "output_tokens": 190,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 15,
+              "input_tokens": 10256,
+              "output_tokens": 189,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 16,
+              "input_tokens": 10629,
+              "output_tokens": 97,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 17,
+              "input_tokens": 10836,
+              "output_tokens": 291,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 18,
+              "input_tokens": 11344,
+              "output_tokens": 210,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 19,
+              "input_tokens": 11578,
+              "output_tokens": 251,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 20,
+              "input_tokens": 11980,
+              "output_tokens": 173,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 21,
+              "input_tokens": 12177,
+              "output_tokens": 245,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 22,
+              "input_tokens": 13053,
+              "output_tokens": 183,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 23,
+              "input_tokens": 13260,
+              "output_tokens": 244,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 24,
+              "input_tokens": 13693,
+              "output_tokens": 173,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 25,
+              "input_tokens": 13890,
+              "output_tokens": 187,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 26,
+              "input_tokens": 14101,
+              "output_tokens": 235,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            },
+            {
+              "turn": 27,
+              "input_tokens": 14479,
+              "output_tokens": 914,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 7884
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "coordinator": "llm_batch_planner_with_repair",
+    "coordinator_type": "llm",
+    "batch_target_estimated_turns": 6,
+    "global_max_turns": 60,
+    "executor_turns_used": 87,
+    "executor_turns_remaining": 0,
+    "batches": [
+      {
+        "label": "batch01_R1-R1",
+        "r_ids": [
+          "R1"
+        ],
+        "max_turns": 7,
+        "verdict": "FAIL",
+        "turns": 6,
+        "tool_calls": 11,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 6,
+          "http_call_with_session": 3,
+          "parallel_n": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch02_R2-R2",
+        "r_ids": [
+          "R2"
+        ],
+        "max_turns": 7,
+        "verdict": "FAIL",
+        "turns": 7,
+        "tool_calls": 8,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 6,
+          "race_pair": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch03_R3-R3",
+        "r_ids": [
+          "R3"
+        ],
+        "max_turns": 8,
+        "verdict": "PASS",
+        "turns": 7,
+        "tool_calls": 12,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 7,
+          "http_call_with_session": 3,
+          "race_pair": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch04_R4-R4",
+        "r_ids": [
+          "R4"
+        ],
+        "max_turns": 7,
+        "verdict": "FAIL",
+        "turns": 7,
+        "tool_calls": 10,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 6,
+          "http_call_with_session": 2,
+          "race_pair": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch05_R5-R6",
+        "r_ids": [
+          "R5",
+          "R6"
+        ],
+        "max_turns": 8,
+        "verdict": "FAIL",
+        "turns": 5,
+        "tool_calls": 15,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 7,
+          "http_call_with_session": 4,
+          "record_event": 2,
+          "submit_verdict_for_R": 2
+        }
+      },
+      {
+        "label": "batch06_R7-R8",
+        "r_ids": [
+          "R7",
+          "R8"
+        ],
+        "max_turns": 8,
+        "verdict": "FAIL",
+        "turns": 8,
+        "tool_calls": 21,
+        "missing": [],
+        "tool_counts": {
+          "http_call_with_session": 11,
+          "http_call": 7,
+          "submit_verdict_for_R": 2,
+          "record_event": 1
+        }
+      },
+      {
+        "label": "batch07_R9-R11",
+        "r_ids": [
+          "R9",
+          "R10",
+          "R11"
+        ],
+        "max_turns": 10,
+        "verdict": "FAIL",
+        "turns": 9,
+        "tool_calls": 24,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 14,
+          "http_call_with_session": 7,
+          "submit_verdict_for_R": 3
+        }
+      },
+      {
+        "label": "batch08_R12-R14",
+        "r_ids": [
+          "R12",
+          "R13",
+          "R14"
+        ],
+        "max_turns": 7,
+        "verdict": "PASS",
+        "turns": 2,
+        "tool_calls": 14,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 11,
+          "submit_verdict_for_R": 3
+        }
+      },
+      {
+        "label": "batch09_R15-R18",
+        "r_ids": [
+          "R15",
+          "R16",
+          "R17",
+          "R18"
+        ],
+        "max_turns": 10,
+        "verdict": "FAIL",
+        "turns": 9,
+        "tool_calls": 31,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 25,
+          "submit_verdict_for_R": 4,
+          "http_call_with_session": 2
+        }
+      },
+      {
+        "label": "exploration",
+        "r_ids": [],
+        "max_turns": 51,
+        "verdict": "FAIL",
+        "turns": 27,
+        "tool_calls": 46,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 27,
+          "record_event": 11,
+          "http_call_with_session": 6,
+          "remember_fact": 1,
+          "submit_verdict": 1
+        }
+      }
+    ]
+  }
+}

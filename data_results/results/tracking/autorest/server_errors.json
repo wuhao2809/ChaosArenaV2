@@ -1,0 +1,17 @@
+{
+  "findByEmployeeIdAndProjectIdUsingGET": [],
+  "findByDepartmentIdUsingGET": [],
+  "findByUsernameUsingGET_1": [],
+  "findAllByEmployeeIdAndManagerIdUsingGET": [],
+  "findByIdUsingGET_3": [],
+  "findByProjectIdUsingGET": [],
+  "findManagerProjectDataByEmployeeIdUsingGET": [],
+  "findByIdUsingGET_5": [],
+  "findByIdUsingGET_2": [],
+  "findByEmployeeIdAndProjectIdAndCommitDateUsingGET": [],
+  "findByIdUsingGET_1": [],
+  "findByIdUsingGET": [],
+  "findByIdUsingGET_4": [],
+  "findByUsernameUsingGET": [],
+  "findByEmployeeProjectDataEmployeeIdUsingGET": []
+}

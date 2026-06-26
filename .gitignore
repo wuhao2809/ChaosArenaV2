@@ -30,6 +30,9 @@ Thumbs.db
 *.log
 tmp/
 
+# Large result files (exceed GitHub 100MB limit)
+data_results/results/tracking/autorest/successful_responses.json
+
 # Run output (conversation dumps, can be large)
 agent/memory/*.json
 

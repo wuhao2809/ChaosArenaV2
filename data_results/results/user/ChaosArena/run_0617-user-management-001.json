@@ -1,0 +1,1553 @@
+{
+  "run_id": "0617-user-management-001",
+  "eval_mode": "orchestrated_cover_all",
+  "verdict": "FAIL",
+  "reasoning": "Multi-agent orchestration aggregate verdict.\n\nBatch results:\n- batch01_R1-R1 (R1): FAIL, covered 1/1, turns=3, tools=3\n- batch02_R2-R2 (R2): FAIL, covered 1/1, turns=8, tools=11\n- batch03_R3-R3 (R3): FAIL, covered 1/1, turns=6, tools=7\n- batch04_R4-R4 (R4): FAIL, covered 1/1, turns=3, tools=3\n- batch05_R5-R6 (R5, R6): FAIL, covered 2/2, turns=4, tools=12\n- batch06_R7-R8 (R7, R8): FAIL, covered 2/2, turns=4, tools=5\n- batch07_R9-R10 (R9, R10): FAIL, covered 2/2, turns=2, tools=3\n- batch08_R11-R12 (R11, R12): FAIL, covered 2/2, turns=7, tools=11\n- batch09_R13-R15 (R13, R14, R15): PASS, covered 3/3, turns=9, tools=13\n- batch10_R16-R20 (R16, R19, R20): PASS, covered 3/3, turns=2, tools=12\n- batch11_R17-R18 (R17, R18): FAIL, covered 2/2, turns=6, tools=14\n- batch12_R21-R21 (R21): PASS, covered 1/1, turns=2, tools=2\n- exploration (): FAIL, covered 0/0, turns=35, tools=56\n\nRequired coverage: 21/21.\nMissing Rs: none.\nFailed Rs: ['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'R11', 'R12', 'R17', 'R18'].",
+  "required_ids": [
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6",
+    "R7",
+    "R8",
+    "R9",
+    "R10",
+    "R11",
+    "R12",
+    "R13",
+    "R14",
+    "R15",
+    "R16",
+    "R17",
+    "R18",
+    "R19",
+    "R20",
+    "R21"
+  ],
+  "r_verdicts": {
+    "R1": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Two concurrent POST /users/register with username \"raceuser\" were fired simultaneously. Results: one returned 201 (success, id=12), the other returned 500 Internal Server Error with message \"could not execute statement; SQL [n/a]; constraint [users.username]; nested exception is org.hibernate.exception.ConstraintViolationException\". The spec requires the duplicate to return 409 Conflict, but the service returned 500 instead. The database constraint did prevent a duplicate record (GET /users shows exactly one \"raceuser\" with id=12), but the error handling is wrong — a ConstraintViolationException should be caught and translated to 409 Conflict, not propagated as a 500 Internal Server Error.",
+      "turn": 3,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Two concurrent POST /users/register with username \"raceuser\" were fired simultaneously. Results: one returned 201 (success, id=12), the other returned 500 Internal Server Error with message \"could not execute statement; SQL [n/a]; constraint [users.username]; nested exception is org.hibernate.exception.ConstraintViolationException\". The spec requires the duplicate to return 409 Conflict, but the service returned 500 instead. The database constraint did prevent a duplicate record (GET /users shows exactly one \"raceuser\" with id=12), but the error handling is wrong — a ConstraintViolationException should be caught and translated to 409 Conflict, not propagated as a 500 Internal Server Error.",
+          "turn": 3,
+          "amended": false
+        }
+      ]
+    },
+    "R2": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Two race scenarios tested with barrier_concurrent (race_pair):\n\n**Scenario 1 (assign wins):** POST /users/15/roles/6 → 201 (assigned); DELETE /users/rbac/roles/6 → **500** ConstraintViolationException. Spec requires DELETE to return 409 or 200 with cleanup, not 500.\n\n**Scenario 2 (delete wins):** DELETE /users/rbac/roles/7 → 204; POST /users/15/roles/7 → **500** ConstraintViolationException. Spec requires assignment to return 404 (role already gone), not 500.\n\nBoth races produce unhandled HTTP 500 errors from DB FK constraint violations instead of proper 404/409 responses. The DB FK constraint does prevent dangling role references (GET /users/15 shows no dangling role from scenario 2), but the error handling is wrong — 500 instead of the spec-required 404 or 409/200.",
+      "turn": 8,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Two race scenarios tested with barrier_concurrent (race_pair):\n\n**Scenario 1 (assign wins):** POST /users/15/roles/6 → 201 (assigned); DELETE /users/rbac/roles/6 → **500** ConstraintViolationException. Spec requires DELETE to return 409 or 200 with cleanup, not 500.\n\n**Scenario 2 (delete wins):** DELETE /users/rbac/roles/7 → 204; POST /users/15/roles/7 → **500** ConstraintViolationException. Spec requires assignment to return 404 (role already gone), not 500.\n\nBoth races produce unhandled HTTP 500 errors from DB FK constraint violations instead of proper 404/409 responses. The DB FK constraint does prevent dangling role references (GET /users/15 shows no dangling role from scenario 2), but the error handling is wrong — 500 instead of the spec-required 404 or 409/200.",
+          "turn": 8,
+          "amended": false
+        }
+      ]
+    },
+    "R3": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Race between POST /users/rbac/roles/1/permissions/BATCH03_R3_TESTPERM (assign) and DELETE /users/rbac/permissions/BATCH03_R3_TESTPERM (delete) with release_skew_us=745. Result: DELETE returned 204 (success), but the concurrent assignment returned HTTP 500 with body: {\"status\":500,\"error\":\"Internal Server Error\",\"message\":\"could not execute statement; SQL [n/a]; constraint [null]; nested exception is org.hibernate.exception.ConstraintViolationException: could not execute statement\"}. The spec requires the assignment to return 404 (permission not found) or the deletion to return 409/200 with cascade — a 500 Internal Server Error is not an acceptable outcome. Final state is consistent (role 1 does not list the deleted permission; GET /users/rbac/permissions/BATCH03_R3_TESTPERM returns 404), but the unhandled ConstraintViolationException violates the spec's required error handling.",
+      "turn": 6,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Race between POST /users/rbac/roles/1/permissions/BATCH03_R3_TESTPERM (assign) and DELETE /users/rbac/permissions/BATCH03_R3_TESTPERM (delete) with release_skew_us=745. Result: DELETE returned 204 (success), but the concurrent assignment returned HTTP 500 with body: {\"status\":500,\"error\":\"Internal Server Error\",\"message\":\"could not execute statement; SQL [n/a]; constraint [null]; nested exception is org.hibernate.exception.ConstraintViolationException: could not execute statement\"}. The spec requires the assignment to return 404 (permission not found) or the deletion to return 409/200 with cascade — a 500 Internal Server Error is not an acceptable outcome. Final state is consistent (role 1 does not list the deleted permission; GET /users/rbac/permissions/BATCH03_R3_TESTPERM returns 404), but the unhandled ConstraintViolationException violates the spec's required error handling.",
+          "turn": 6,
+          "amended": false
+        }
+      ]
+    },
+    "R4": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Two concurrent POST /users with identical username 'adminrace' (barrier-released): one returned 201 Created (correct, user id=13 persisted), the other returned 500 Internal Server Error with body: \"ConstraintViolationException: could not execute statement; SQL [n/a]; constraint [users.username]\". The spec requires exactly one 200/201 and the other 409 Conflict. The DB uniqueness constraint correctly prevents double-creation (only one record persisted), but the application fails to catch the constraint violation and translate it to a 409 — instead leaking a raw 500. This is a FAILED criterion.",
+      "turn": 3,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Two concurrent POST /users with identical username 'adminrace' (barrier-released): one returned 201 Created (correct, user id=13 persisted), the other returned 500 Internal Server Error with body: \"ConstraintViolationException: could not execute statement; SQL [n/a]; constraint [users.username]\". The spec requires exactly one 200/201 and the other 409 Conflict. The DB uniqueness constraint correctly prevents double-creation (only one record persisted), but the application fails to catch the constraint violation and translate it to a 409 — instead leaking a raw 500. This is a FAILED criterion.",
+          "turn": 3,
+          "amended": false
+        }
+      ]
+    },
+    "R5": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "GET /users/17 (User B's profile) returned HTTP 200 with full UserDTO — name \"UserB\", email \"r5userB@example.com\", roles [\"USER\"], permissions [\"LOGIN\",\"VIEW_PROFILE\"], and all contact details — without any authentication or session cookie. The spec requires 403 or 404 when a regular user (User A) attempts to read another user's profile. No auth enforcement exists; the endpoint is fully open.",
+      "turn": 4,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "GET /users/17 (User B's profile) returned HTTP 200 with full UserDTO — name \"UserB\", email \"r5userB@example.com\", roles [\"USER\"], permissions [\"LOGIN\",\"VIEW_PROFILE\"], and all contact details — without any authentication or session cookie. The spec requires 403 or 404 when a regular user (User A) attempts to read another user's profile. No auth enforcement exists; the endpoint is fully open.",
+          "turn": 4,
+          "amended": false
+        }
+      ]
+    },
+    "R6": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "PUT /users/17 returned HTTP 201 and successfully modified User B's name to \"HACKED\" and email to \"hacked@evil.com\" without any credentials. DELETE /users/17 returned HTTP 204 and successfully deleted User B's account without any credentials. Both operations should return 403 or 404 for a non-admin user. No authorization enforcement exists on either endpoint.",
+      "turn": 4,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "PUT /users/17 returned HTTP 201 and successfully modified User B's name to \"HACKED\" and email to \"hacked@evil.com\" without any credentials. DELETE /users/17 returned HTTP 204 and successfully deleted User B's account without any credentials. Both operations should return 403 or 404 for a non-admin user. No authorization enforcement exists on either endpoint.",
+          "turn": 4,
+          "amended": false
+        }
+      ]
+    },
+    "R7": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "POST /users/2/roles/2 (assigning ADMINISTRATOR role to regular user mario, with no authentication credentials) returned HTTP 201 with mario's roles now showing [\"USER\", \"ADMINISTRATOR\"]. The spec requires 403 Forbidden. No auth enforcement exists — any unauthenticated request can escalate any user to admin. GET /users/2 immediately after confirmed the role was successfully assigned (roles: [\"USER\", \"ADMINISTRATOR\"], permissions: [\"LOGIN\", \"VIEW_PROFILE\", \"ADMIN_USER_DATA\"]).",
+      "turn": 4,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "POST /users/2/roles/2 (assigning ADMINISTRATOR role to regular user mario, with no authentication credentials) returned HTTP 201 with mario's roles now showing [\"USER\", \"ADMINISTRATOR\"]. The spec requires 403 Forbidden. No auth enforcement exists — any unauthenticated request can escalate any user to admin. GET /users/2 immediately after confirmed the role was successfully assigned (roles: [\"USER\", \"ADMINISTRATOR\"], permissions: [\"LOGIN\", \"VIEW_PROFILE\", \"ADMIN_USER_DATA\"]).",
+          "turn": 4,
+          "amended": false
+        }
+      ]
+    },
+    "R8": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "All RBAC management endpoints returned 2xx without any authentication: GET /users/rbac/roles → 200, GET /users/rbac/permissions → 200, POST /users/rbac/roles → 201 (created role id=5), POST /users/rbac/permissions → 201 (created permission id=6 \"BATCH06_TESTPERM\"). PUT /users/rbac/permissions returned 500 (server error, not 403). The spec requires every request to return 403 Forbidden. No auth enforcement exists — unauthenticated requests freely read and mutate RBAC data.",
+      "turn": 4,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "All RBAC management endpoints returned 2xx without any authentication: GET /users/rbac/roles → 200, GET /users/rbac/permissions → 200, POST /users/rbac/roles → 201 (created role id=5), POST /users/rbac/permissions → 201 (created permission id=6 \"BATCH06_TESTPERM\"). PUT /users/rbac/permissions returned 500 (server error, not 403). The spec requires every request to return 403 Forbidden. No auth enforcement exists — unauthenticated requests freely read and mutate RBAC data.",
+          "turn": 4,
+          "amended": false
+        }
+      ]
+    },
+    "R9": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "All five anonymous requests succeeded without any credentials: GET /users → 200 (returned full userList with 10 users including emails, roles, permissions); GET /users/1 → 200 (returned full UserDTO); GET /users/rbac/roles → 200 (returned all roles with permissions); GET /users/rbac/permissions → 200 (returned all permissions); DELETE /users/9 → 204 (deleted user successfully). Spec requires every request to return 401 Unauthorized. None returned 401 — all returned 200 or 204 with full data/action executed.",
+      "turn": 2,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "All five anonymous requests succeeded without any credentials: GET /users → 200 (returned full userList with 10 users including emails, roles, permissions); GET /users/1 → 200 (returned full UserDTO); GET /users/rbac/roles → 200 (returned all roles with permissions); GET /users/rbac/permissions → 200 (returned all permissions); DELETE /users/9 → 204 (deleted user successfully). Spec requires every request to return 401 Unauthorized. None returned 401 — all returned 200 or 204 with full data/action executed.",
+          "turn": 2,
+          "amended": false
+        }
+      ]
+    },
+    "R10": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Anonymous GET /users/rbac/salt returned HTTP 201 with a salt string (\"tjI0FsBvSsXeHj3MvbF4BVeSEMAH7sLQ\") in the response body. Spec requires 401 Unauthorized with no salt returned. The endpoint is fully accessible without any authentication credentials.",
+      "turn": 2,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Anonymous GET /users/rbac/salt returned HTTP 201 with a salt string (\"tjI0FsBvSsXeHj3MvbF4BVeSEMAH7sLQ\") in the response body. Spec requires 401 Unauthorized with no salt returned. The endpoint is fully accessible without any authentication credentials.",
+          "turn": 2,
+          "amended": false
+        }
+      ]
+    },
+    "R11": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Created user `disabledtest_r11` (id=18) via POST /users/register, then disabled them via PUT /users/18 (enabled=false confirmed in response). POST /login with valid credentials returned HTTP 400 with body {\"message\": \"User is not enabled\", \"timestamp\": ...}. Spec requires 401 or 403; the service returns 400 instead. Additionally, no session cookie or token is issued (confirmed by API playbook — no Set-Cookie header ever returned), which is technically correct behavior, but the status code is wrong (400 vs 401/403).",
+      "turn": 7,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Created user `disabledtest_r11` (id=18) via POST /users/register, then disabled them via PUT /users/18 (enabled=false confirmed in response). POST /login with valid credentials returned HTTP 400 with body {\"message\": \"User is not enabled\", \"timestamp\": ...}. Spec requires 401 or 403; the service returns 400 instead. Additionally, no session cookie or token is issued (confirmed by API playbook — no Set-Cookie header ever returned), which is technically correct behavior, but the status code is wrong (400 vs 401/403).",
+          "turn": 7,
+          "amended": false
+        }
+      ]
+    },
+    "R12": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "GET /users (unauthenticated, no credentials) returned HTTP 200 with full userList containing all users including emails, roles, contact details, and address data. Spec requires 403 Forbidden for a regular user. The endpoint has no authentication enforcement whatsoever — it returns the complete user list to any caller without any credentials. Response included 9 users with full PII (emails like andrea.test@gmail.com, mario.rossi@gmail.com, etc.), roles, and contact details.",
+      "turn": 7,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "GET /users (unauthenticated, no credentials) returned HTTP 200 with full userList containing all users including emails, roles, contact details, and address data. Spec requires 403 Forbidden for a regular user. The endpoint has no authentication enforcement whatsoever — it returns the complete user list to any caller without any credentials. Response included 9 users with full PII (emails like andrea.test@gmail.com, mario.rossi@gmail.com, etc.), roles, and contact details.",
+          "turn": 7,
+          "amended": false
+        }
+      ]
+    },
+    "R13": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "Duplicate username attempt returned HTTP 400 with message \"The username alice_r13_batch09 it's already in use from another user with ID = 19\". Duplicate email attempt returned HTTP 400 with message \"This email alice_r13_batch09@example.com it's already in use.\" Neither returned 500. No duplicate user record was created (confirmed by the error messages referencing the original user ID=19).",
+      "turn": 9,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "Duplicate username attempt returned HTTP 400 with message \"The username alice_r13_batch09 it's already in use from another user with ID = 19\". Duplicate email attempt returned HTTP 400 with message \"This email alice_r13_batch09@example.com it's already in use.\" Neither returned 500. No duplicate user record was created (confirmed by the error messages referencing the original user ID=19).",
+          "turn": 9,
+          "amended": false
+        }
+      ]
+    },
+    "R14": {
+      "verdict": "UNTESTABLE",
+      "confidence": "LOW",
+      "evidence": "Tool invocation failures in this run prevented construction of the 10,000-character username/password and 100,000-character note payloads. The body parameter was not properly transmitted in multiple attempts. Cannot determine whether the service returns 400/413 or 500/truncation for oversize fields.",
+      "turn": 9,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "UNTESTABLE",
+          "confidence": "LOW",
+          "evidence": "Tool invocation failures in this run prevented construction of the 10,000-character username/password and 100,000-character note payloads. The body parameter was not properly transmitted in multiple attempts. Cannot determine whether the service returns 400/413 or 500/truncation for oversize fields.",
+          "turn": 9,
+          "amended": false
+        }
+      ]
+    },
+    "R15": {
+      "verdict": "UNTESTABLE",
+      "confidence": "LOW",
+      "evidence": "Tool invocation failures in this run prevented firing the SQL injection probe (username=\"' OR '1'='1'--\", password=\"anything\"). Cannot confirm whether the service returns 400 (invalid credentials) vs 200 (bypass) vs 500 (unhandled query error). The playbook notes that POST /login returns 400 for invalid credentials, which suggests the service may handle this correctly, but direct evidence was not obtained.",
+      "turn": 9,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "UNTESTABLE",
+          "confidence": "LOW",
+          "evidence": "Tool invocation failures in this run prevented firing the SQL injection probe (username=\"' OR '1'='1'--\", password=\"anything\"). Cannot confirm whether the service returns 400 (invalid credentials) vs 200 (bypass) vs 500 (unhandled query error). The playbook notes that POST /login returns 400 for invalid credentials, which suggests the service may handle this correctly, but direct evidence was not obtained.",
+          "turn": 9,
+          "amended": false
+        }
+      ]
+    },
+    "R16": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "Three path-traversal/special-char probes on GET /users/rbac/permissions/{key}: (1) '../admin' → path normalized by servlet container to /users/rbac/admin → 404 Not Found (no unintended resource resolved, no 500); (2) 'key%2F..%2Fadmin' (URL-encoded slash) → 400 Bad Request from Tomcat (rejected at container level); (3) 'key with spaces' → 404 Not Found with message \"Permission not found for permission key = key with spaces\". No 500 responses, no unintended resource resolution observed.",
+      "turn": 2,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "Three path-traversal/special-char probes on GET /users/rbac/permissions/{key}: (1) '../admin' → path normalized by servlet container to /users/rbac/admin → 404 Not Found (no unintended resource resolved, no 500); (2) 'key%2F..%2Fadmin' (URL-encoded slash) → 400 Bad Request from Tomcat (rejected at container level); (3) 'key with spaces' → 404 Not Found with message \"Permission not found for permission key = key with spaces\". No 500 responses, no unintended resource resolution observed.",
+          "turn": 2,
+          "amended": false
+        }
+      ]
+    },
+    "R19": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "Three invalid birthDate values on PUT /users/10: (1) 'not-a-date' → 400 Bad Request with JSON parse error; (2) '99999-99-99' → 400 Bad Request with JSON parse error; (3) '2024-02-30' → 400 Bad Request with \"Invalid date 'FEBRUARY 30'\". All three returned 400, none returned 500, no partial update persisted.",
+      "turn": 2,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "Three invalid birthDate values on PUT /users/10: (1) 'not-a-date' → 400 Bad Request with JSON parse error; (2) '99999-99-99' → 400 Bad Request with JSON parse error; (3) '2024-02-30' → 400 Bad Request with \"Invalid date 'FEBRUARY 30'\". All three returned 400, none returned 500, no partial update persisted.",
+          "turn": 2,
+          "amended": false
+        }
+      ]
+    },
+    "R20": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "Three missing-field registration probes on POST /users/register: (1) omitting username → 400 with \"username cannot be null\"; (2) omitting password → 400 with \"Password cannot be null or empty\"; (3) omitting email → 400 with \"The Email cannot be null or empty\". All three returned 400 with descriptive error messages, no 500, no partial user records created.",
+      "turn": 2,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "Three missing-field registration probes on POST /users/register: (1) omitting username → 400 with \"username cannot be null\"; (2) omitting password → 400 with \"Password cannot be null or empty\"; (3) omitting email → 400 with \"The Email cannot be null or empty\". All three returned 400 with descriptive error messages, no 500, no partial user records created.",
+          "turn": 2,
+          "amended": false
+        }
+      ]
+    },
+    "R17": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "DELETE /users/rbac/roles/1 (USER role, assigned to 15 users) returned HTTP 400 with body {\"message\": \"The role 1 USER is in use (15 users_roles configuration rows) and cannot be deleted\"}. Spec requires either 409 Conflict or 200/204 with cascade removal. The service returned 400 instead of 409. The role was not deleted (GET /users/rbac/roles/1 still returns 200 with full role data). No 500 and no orphan reference, but the required status code (409) was not used — 400 was returned instead.",
+      "turn": 6,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "DELETE /users/rbac/roles/1 (USER role, assigned to 15 users) returned HTTP 400 with body {\"message\": \"The role 1 USER is in use (15 users_roles configuration rows) and cannot be deleted\"}. Spec requires either 409 Conflict or 200/204 with cascade removal. The service returned 400 instead of 409. The role was not deleted (GET /users/rbac/roles/1 still returns 200 with full role data). No 500 and no orphan reference, but the required status code (409) was not used — 400 was returned instead.",
+          "turn": 6,
+          "amended": false
+        }
+      ]
+    },
+    "R18": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "DELETE /users/rbac/permissions/BATCH11_TESTPERM_R18 (permission assigned to role USER id=1) returned HTTP 400 with body {\"message\": \"The permission with key BATCH11_TESTPERM_R18 is in used (1 configuration rows)\"}. Spec requires either 409 Conflict or 200/204 with cascade removal. The service returned 400 instead of 409. The permission still exists (GET /users/rbac/permissions/BATCH11_TESTPERM_R18 returns 200). No 500 and no orphan reference, but the required status code (409) was not used — 400 was returned instead.",
+      "turn": 6,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "DELETE /users/rbac/permissions/BATCH11_TESTPERM_R18 (permission assigned to role USER id=1) returned HTTP 400 with body {\"message\": \"The permission with key BATCH11_TESTPERM_R18 is in used (1 configuration rows)\"}. Spec requires either 409 Conflict or 200/204 with cascade removal. The service returned 400 instead of 409. The permission still exists (GET /users/rbac/permissions/BATCH11_TESTPERM_R18 returns 200). No 500 and no orphan reference, but the required status code (409) was not used — 400 was returned instead.",
+          "turn": 6,
+          "amended": false
+        }
+      ]
+    },
+    "R21": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "GET /users/-1 → 404 {\"message\":\"User not found for Id = -1\"}, GET /users/0 → 404 {\"message\":\"User not found for Id = 0\"}, GET /users/rbac/roles/-1 → 404 {\"message\":\"Role not found for Id = -1\"}, GET /users/rbac/roles/0 → 404 {\"message\":\"Role not found for Id = 0\"}. All four return 404, not 500. Spec requires 400 or 404 — all pass.",
+      "turn": 2,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "GET /users/-1 → 404 {\"message\":\"User not found for Id = -1\"}, GET /users/0 → 404 {\"message\":\"User not found for Id = 0\"}, GET /users/rbac/roles/-1 → 404 {\"message\":\"Role not found for Id = -1\"}, GET /users/rbac/roles/0 → 404 {\"message\":\"Role not found for Id = 0\"}. All four return 404, not 500. Spec requires 400 or 404 — all pass.",
+          "turn": 2,
+          "amended": false
+        }
+      ]
+    }
+  },
+  "r_missing": [],
+  "tool_counts": {
+    "http_call": 97,
+    "submit_verdict_for_R": 21,
+    "record_event": 21,
+    "barrier_concurrent": 6,
+    "race_pair": 3,
+    "parallel_n": 2,
+    "remember_fact": 1,
+    "submit_verdict": 1
+  },
+  "usage": {
+    "input_tokens": 812704,
+    "output_tokens": 92531,
+    "cache_creation_input_tokens": 139200,
+    "cache_read_input_tokens": 1178721,
+    "cost_usd": 4.701694,
+    "pricing_version": "2026-Q2",
+    "coordinator": [
+      {
+        "phase": "initial_batch_plan",
+        "input_tokens": 4913,
+        "output_tokens": 907,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cost_usd": 0.028344,
+        "model": "us.anthropic.claude-sonnet-4-6",
+        "raw_response": "{\n  \"batches\": [\n    {\n      \"r_ids\": [\"R1\"],\n      \"rationale\": \"Race condition: concurrent duplicate registration via /users/register. Each race R gets its own batch to ensure full turn budget for setup + concurrent execution + analysis.\"\n    },\n    {\n      \"r_ids\": [\"R2\"],\n      \"rationale\": \"Race condition: concurrent role assignment vs global role deletion. Isolated to guarantee full turn budget for setup + parallel execution + invariant check.\"\n    },\n    {\n      \"r_ids\": [\"R3\"],\n      \"rationale\": \"Race condition: concurrent permission-to-role assignment vs permission deletion. Isolated per race R policy — needs full budget for setup + concurrent probe + dangling-reference check.\"\n    },\n    {\n      \"r_ids\": [\"R4\"],\n      \"rationale\": \"Race condition: concurrent duplicate admin user creation via /users. Isolated per race R policy — setup + concurrent POST + single-record verification requires full budget.\"\n    },\n    {\n      \"r_ids\": [\"R5\", \"R6\"],\n      \"rationale\": \"Auth boundary / IDOR: both Rs require two registered users (A and B) and a non-admin session for User A. They share identical setup (register A, register B, login as A) and together cost 4 estimated turns, within the ≤6 target.\"\n    },\n    {\n      \"r_ids\": [\"R7\", \"R8\"],\n      \"rationale\": \"Auth boundary / privilege escalation: both Rs require a non-admin authenticated user and an admin role. R7 tests self-role-escalation; R8 tests RBAC management endpoint access. Shared session setup; combined 4 estimated ... [truncated, 3265 chars total]",
+        "planned_batches": [
+          [
+            "R1"
+          ],
+          [
+            "R2"
+          ],
+          [
+            "R3"
+          ],
+          [
+            "R4"
+          ],
+          [
+            "R5",
+            "R6"
+          ],
+          [
+            "R7",
+            "R8"
+          ],
+          [
+            "R9",
+            "R10"
+          ],
+          [
+            "R11",
+            "R12"
+          ],
+          [
+            "R13",
+            "R14",
+            "R15"
+          ],
+          [
+            "R16",
+            "R19",
+            "R20"
+          ],
+          [
+            "R17",
+            "R18"
+          ],
+          [
+            "R21"
+          ]
+        ]
+      },
+      {
+        "input_tokens": 322826,
+        "output_tokens": 8423,
+        "cache_creation_input_tokens": 2659,
+        "cache_read_input_tokens": 77111,
+        "cost_usd": 1.127928,
+        "turns": 30,
+        "model": "us.anthropic.claude-sonnet-4-6",
+        "phase": "api_probe"
+      }
+    ],
+    "per_batch": [
+      {
+        "batch": "batch01_R1-R1",
+        "r_ids": [
+          "R1"
+        ],
+        "usage": {
+          "input_tokens": 3681,
+          "output_tokens": 581,
+          "cache_creation_input_tokens": 14277,
+          "cache_read_input_tokens": 28554,
+          "cost_usd": 0.081863,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 222,
+              "cache_creation_input_tokens": 14277,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 689,
+              "output_tokens": 71,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14277
+            },
+            {
+              "turn": 3,
+              "input_tokens": 2962,
+              "output_tokens": 288,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14277
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch02_R2-R2",
+        "r_ids": [
+          "R2"
+        ],
+        "usage": {
+          "input_tokens": 14595,
+          "output_tokens": 1936,
+          "cache_creation_input_tokens": 14297,
+          "cache_read_input_tokens": 100079,
+          "cost_usd": 0.156462,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 370,
+              "cache_creation_input_tokens": 14297,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 725,
+              "output_tokens": 146,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14297
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1301,
+              "output_tokens": 157,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14297
+            },
+            {
+              "turn": 4,
+              "input_tokens": 1803,
+              "output_tokens": 193,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14297
+            },
+            {
+              "turn": 5,
+              "input_tokens": 2050,
+              "output_tokens": 109,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14297
+            },
+            {
+              "turn": 6,
+              "input_tokens": 2363,
+              "output_tokens": 134,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14297
+            },
+            {
+              "turn": 7,
+              "input_tokens": 2841,
+              "output_tokens": 486,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14297
+            },
+            {
+              "turn": 8,
+              "input_tokens": 3482,
+              "output_tokens": 341,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14297
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch03_R3-R3",
+        "r_ids": [
+          "R3"
+        ],
+        "usage": {
+          "input_tokens": 5085,
+          "output_tokens": 1363,
+          "cache_creation_input_tokens": 14302,
+          "cache_read_input_tokens": 71510,
+          "cost_usd": 0.110786,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 238,
+              "cache_creation_input_tokens": 14302,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 336,
+              "output_tokens": 155,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14302
+            },
+            {
+              "turn": 3,
+              "input_tokens": 591,
+              "output_tokens": 185,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14302
+            },
+            {
+              "turn": 4,
+              "input_tokens": 1020,
+              "output_tokens": 183,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14302
+            },
+            {
+              "turn": 5,
+              "input_tokens": 1404,
+              "output_tokens": 254,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14302
+            },
+            {
+              "turn": 6,
+              "input_tokens": 1704,
+              "output_tokens": 348,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14302
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch04_R4-R4",
+        "r_ids": [
+          "R4"
+        ],
+        "usage": {
+          "input_tokens": 1868,
+          "output_tokens": 854,
+          "cache_creation_input_tokens": 14332,
+          "cache_read_input_tokens": 28664,
+          "cost_usd": 0.080758,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 280,
+              "cache_creation_input_tokens": 14332,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 737,
+              "output_tokens": 321,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14332
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1101,
+              "output_tokens": 253,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14332
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch05_R5-R6",
+        "r_ids": [
+          "R5",
+          "R6"
+        ],
+        "usage": {
+          "input_tokens": 4214,
+          "output_tokens": 1679,
+          "cache_creation_input_tokens": 14387,
+          "cache_read_input_tokens": 43161,
+          "cost_usd": 0.104727,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 33,
+              "output_tokens": 192,
+              "cache_creation_input_tokens": 14387,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 576,
+              "output_tokens": 298,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14387
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1363,
+              "output_tokens": 331,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14387
+            },
+            {
+              "turn": 4,
+              "input_tokens": 2242,
+              "output_tokens": 858,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14387
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch06_R7-R8",
+        "r_ids": [
+          "R7",
+          "R8"
+        ],
+        "usage": {
+          "input_tokens": 10092,
+          "output_tokens": 1044,
+          "cache_creation_input_tokens": 14401,
+          "cache_read_input_tokens": 43203,
+          "cost_usd": 0.112901,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 33,
+              "output_tokens": 307,
+              "cache_creation_input_tokens": 14401,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 1171,
+              "output_tokens": 112,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14401
+            },
+            {
+              "turn": 3,
+              "input_tokens": 4075,
+              "output_tokens": 144,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14401
+            },
+            {
+              "turn": 4,
+              "input_tokens": 4813,
+              "output_tokens": 481,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14401
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch07_R9-R10",
+        "r_ids": [
+          "R9",
+          "R10"
+        ],
+        "usage": {
+          "input_tokens": 3131,
+          "output_tokens": 620,
+          "cache_creation_input_tokens": 14354,
+          "cache_read_input_tokens": 14354,
+          "cost_usd": 0.076827,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 33,
+              "output_tokens": 184,
+              "cache_creation_input_tokens": 14354,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 3098,
+              "output_tokens": 436,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14354
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch08_R11-R12",
+        "r_ids": [
+          "R11",
+          "R12"
+        ],
+        "usage": {
+          "input_tokens": 18992,
+          "output_tokens": 1787,
+          "cache_creation_input_tokens": 14360,
+          "cache_read_input_tokens": 86160,
+          "cost_usd": 0.163479,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 33,
+              "output_tokens": 206,
+              "cache_creation_input_tokens": 14360,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 2143,
+              "output_tokens": 263,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14360
+            },
+            {
+              "turn": 3,
+              "input_tokens": 2541,
+              "output_tokens": 301,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14360
+            },
+            {
+              "turn": 4,
+              "input_tokens": 2977,
+              "output_tokens": 195,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14360
+            },
+            {
+              "turn": 5,
+              "input_tokens": 3399,
+              "output_tokens": 207,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14360
+            },
+            {
+              "turn": 6,
+              "input_tokens": 3852,
+              "output_tokens": 147,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14360
+            },
+            {
+              "turn": 7,
+              "input_tokens": 4047,
+              "output_tokens": 468,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14360
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch09_R13-R15",
+        "r_ids": [
+          "R13",
+          "R14",
+          "R15"
+        ],
+        "usage": {
+          "input_tokens": 14415,
+          "output_tokens": 58379,
+          "cache_creation_input_tokens": 3779,
+          "cache_read_input_tokens": 126910,
+          "cost_usd": 0.971174,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 36,
+              "output_tokens": 259,
+              "cache_creation_input_tokens": 3779,
+              "cache_read_input_tokens": 10742
+            },
+            {
+              "turn": 2,
+              "input_tokens": 521,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14521
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1242,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14521
+            },
+            {
+              "turn": 4,
+              "input_tokens": 1508,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14521
+            },
+            {
+              "turn": 5,
+              "input_tokens": 1762,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14521
+            },
+            {
+              "turn": 6,
+              "input_tokens": 2018,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14521
+            },
+            {
+              "turn": 7,
+              "input_tokens": 2284,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14521
+            },
+            {
+              "turn": 8,
+              "input_tokens": 2454,
+              "output_tokens": 8192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14521
+            },
+            {
+              "turn": 9,
+              "input_tokens": 2590,
+              "output_tokens": 776,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14521
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch10_R16-R20",
+        "r_ids": [
+          "R16",
+          "R19",
+          "R20"
+        ],
+        "usage": {
+          "input_tokens": 2560,
+          "output_tokens": 1560,
+          "cache_creation_input_tokens": 3759,
+          "cache_read_input_tokens": 25243,
+          "cost_usd": 0.052749,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 36,
+              "output_tokens": 912,
+              "cache_creation_input_tokens": 3759,
+              "cache_read_input_tokens": 10742
+            },
+            {
+              "turn": 2,
+              "input_tokens": 2524,
+              "output_tokens": 648,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14501
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch11_R17-R18",
+        "r_ids": [
+          "R17",
+          "R18"
+        ],
+        "usage": {
+          "input_tokens": 10981,
+          "output_tokens": 2483,
+          "cache_creation_input_tokens": 3651,
+          "cache_read_input_tokens": 82707,
+          "cost_usd": 0.108691,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 33,
+              "output_tokens": 242,
+              "cache_creation_input_tokens": 3651,
+              "cache_read_input_tokens": 10742
+            },
+            {
+              "turn": 2,
+              "input_tokens": 897,
+              "output_tokens": 452,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14393
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1603,
+              "output_tokens": 230,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14393
+            },
+            {
+              "turn": 4,
+              "input_tokens": 2158,
+              "output_tokens": 327,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14393
+            },
+            {
+              "turn": 5,
+              "input_tokens": 2658,
+              "output_tokens": 438,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14393
+            },
+            {
+              "turn": 6,
+              "input_tokens": 3632,
+              "output_tokens": 794,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14393
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch12_R21-R21",
+        "r_ids": [
+          "R21"
+        ],
+        "usage": {
+          "input_tokens": 499,
+          "output_tokens": 415,
+          "cache_creation_input_tokens": 3514,
+          "cache_read_input_tokens": 24998,
+          "cost_usd": 0.028399,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 150,
+              "cache_creation_input_tokens": 3514,
+              "cache_read_input_tokens": 10742
+            },
+            {
+              "turn": 2,
+              "input_tokens": 469,
+              "output_tokens": 265,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 14256
+            }
+          ]
+        }
+      },
+      {
+        "batch": "exploration",
+        "r_ids": [],
+        "usage": {
+          "input_tokens": 394852,
+          "output_tokens": 10500,
+          "cache_creation_input_tokens": 7128,
+          "cache_read_input_tokens": 426067,
+          "cost_usd": 1.496606,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 39,
+              "output_tokens": 275,
+              "cache_creation_input_tokens": 7128,
+              "cache_read_input_tokens": 5249
+            },
+            {
+              "turn": 2,
+              "input_tokens": 692,
+              "output_tokens": 611,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1515,
+              "output_tokens": 171,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 4,
+              "input_tokens": 1735,
+              "output_tokens": 113,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 5,
+              "input_tokens": 5085,
+              "output_tokens": 709,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 6,
+              "input_tokens": 6029,
+              "output_tokens": 185,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 7,
+              "input_tokens": 6280,
+              "output_tokens": 558,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 8,
+              "input_tokens": 7223,
+              "output_tokens": 103,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 9,
+              "input_tokens": 7443,
+              "output_tokens": 291,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 10,
+              "input_tokens": 7785,
+              "output_tokens": 73,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 11,
+              "input_tokens": 8090,
+              "output_tokens": 322,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 12,
+              "input_tokens": 8463,
+              "output_tokens": 286,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 13,
+              "input_tokens": 8800,
+              "output_tokens": 245,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 14,
+              "input_tokens": 9289,
+              "output_tokens": 312,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 15,
+              "input_tokens": 9857,
+              "output_tokens": 328,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 16,
+              "input_tokens": 10267,
+              "output_tokens": 192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 17,
+              "input_tokens": 10557,
+              "output_tokens": 333,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 18,
+              "input_tokens": 11453,
+              "output_tokens": 211,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 19,
+              "input_tokens": 11779,
+              "output_tokens": 339,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 20,
+              "input_tokens": 12536,
+              "output_tokens": 205,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 21,
+              "input_tokens": 12872,
+              "output_tokens": 156,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 22,
+              "input_tokens": 13179,
+              "output_tokens": 367,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 23,
+              "input_tokens": 13925,
+              "output_tokens": 190,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 24,
+              "input_tokens": 14283,
+              "output_tokens": 216,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 25,
+              "input_tokens": 14691,
+              "output_tokens": 388,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 26,
+              "input_tokens": 15490,
+              "output_tokens": 188,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 27,
+              "input_tokens": 15889,
+              "output_tokens": 210,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 28,
+              "input_tokens": 16327,
+              "output_tokens": 511,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 29,
+              "input_tokens": 17630,
+              "output_tokens": 183,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 30,
+              "input_tokens": 18053,
+              "output_tokens": 301,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 31,
+              "input_tokens": 18558,
+              "output_tokens": 203,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 32,
+              "input_tokens": 19017,
+              "output_tokens": 175,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 33,
+              "input_tokens": 19462,
+              "output_tokens": 347,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 34,
+              "input_tokens": 20021,
+              "output_tokens": 229,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            },
+            {
+              "turn": 35,
+              "input_tokens": 20538,
+              "output_tokens": 974,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 12377
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "coordinator": "llm_batch_planner_with_repair",
+    "coordinator_type": "llm",
+    "batch_target_estimated_turns": 6,
+    "global_max_turns": 100,
+    "executor_turns_used": 91,
+    "executor_turns_remaining": 9,
+    "batches": [
+      {
+        "label": "batch01_R1-R1",
+        "r_ids": [
+          "R1"
+        ],
+        "max_turns": 9,
+        "verdict": "FAIL",
+        "turns": 3,
+        "tool_calls": 3,
+        "missing": [],
+        "tool_counts": {
+          "parallel_n": 1,
+          "http_call": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch02_R2-R2",
+        "r_ids": [
+          "R2"
+        ],
+        "max_turns": 9,
+        "verdict": "FAIL",
+        "turns": 8,
+        "tool_calls": 11,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 7,
+          "race_pair": 2,
+          "record_event": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch03_R3-R3",
+        "r_ids": [
+          "R3"
+        ],
+        "max_turns": 9,
+        "verdict": "FAIL",
+        "turns": 6,
+        "tool_calls": 7,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 4,
+          "race_pair": 1,
+          "record_event": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch04_R4-R4",
+        "r_ids": [
+          "R4"
+        ],
+        "max_turns": 9,
+        "verdict": "FAIL",
+        "turns": 3,
+        "tool_calls": 3,
+        "missing": [],
+        "tool_counts": {
+          "parallel_n": 1,
+          "record_event": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch05_R5-R6",
+        "r_ids": [
+          "R5",
+          "R6"
+        ],
+        "max_turns": 10,
+        "verdict": "FAIL",
+        "turns": 4,
+        "tool_calls": 12,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 7,
+          "record_event": 3,
+          "submit_verdict_for_R": 2
+        }
+      },
+      {
+        "label": "batch06_R7-R8",
+        "r_ids": [
+          "R7",
+          "R8"
+        ],
+        "max_turns": 10,
+        "verdict": "FAIL",
+        "turns": 4,
+        "tool_calls": 5,
+        "missing": [],
+        "tool_counts": {
+          "barrier_concurrent": 2,
+          "submit_verdict_for_R": 2,
+          "http_call": 1
+        }
+      },
+      {
+        "label": "batch07_R9-R10",
+        "r_ids": [
+          "R9",
+          "R10"
+        ],
+        "max_turns": 7,
+        "verdict": "FAIL",
+        "turns": 2,
+        "tool_calls": 3,
+        "missing": [],
+        "tool_counts": {
+          "submit_verdict_for_R": 2,
+          "barrier_concurrent": 1
+        }
+      },
+      {
+        "label": "batch08_R11-R12",
+        "r_ids": [
+          "R11",
+          "R12"
+        ],
+        "max_turns": 10,
+        "verdict": "FAIL",
+        "turns": 7,
+        "tool_calls": 11,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 9,
+          "submit_verdict_for_R": 2
+        }
+      },
+      {
+        "label": "batch09_R13-R15",
+        "r_ids": [
+          "R13",
+          "R14",
+          "R15"
+        ],
+        "max_turns": 9,
+        "verdict": "PASS",
+        "turns": 9,
+        "tool_calls": 13,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 8,
+          "submit_verdict_for_R": 3,
+          "barrier_concurrent": 2
+        }
+      },
+      {
+        "label": "batch10_R16-R20",
+        "r_ids": [
+          "R16",
+          "R19",
+          "R20"
+        ],
+        "max_turns": 9,
+        "verdict": "PASS",
+        "turns": 2,
+        "tool_calls": 12,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 9,
+          "submit_verdict_for_R": 3
+        }
+      },
+      {
+        "label": "batch11_R17-R18",
+        "r_ids": [
+          "R17",
+          "R18"
+        ],
+        "max_turns": 10,
+        "verdict": "FAIL",
+        "turns": 6,
+        "tool_calls": 14,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 12,
+          "submit_verdict_for_R": 2
+        }
+      },
+      {
+        "label": "batch12_R21-R21",
+        "r_ids": [
+          "R21"
+        ],
+        "max_turns": 6,
+        "verdict": "PASS",
+        "turns": 2,
+        "tool_calls": 2,
+        "missing": [],
+        "tool_counts": {
+          "barrier_concurrent": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "exploration",
+        "r_ids": [],
+        "max_turns": 44,
+        "verdict": "FAIL",
+        "turns": 35,
+        "tool_calls": 56,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 39,
+          "record_event": 15,
+          "remember_fact": 1,
+          "submit_verdict": 1
+        }
+      }
+    ]
+  }
+}

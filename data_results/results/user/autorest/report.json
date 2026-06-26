@@ -1,0 +1,28 @@
+{
+  "Title": "AutoRestTest Report for 'Api Documentation' (user-management)",
+  "Duration": "1200 seconds",
+  "Total Requests Sent": 115565,
+  "Status Code Distribution": {
+    "400": 54922,
+    "404": 27145,
+    "200": 16062,
+    "201": 6931,
+    "415": 110,
+    "204": 1305,
+    "500": 8938,
+    "405": 152
+  },
+  "Input Tokens": 103818,
+  "Output Tokens":36211,
+  "Total Tokens":140029,
+  "Number of Total Operations": 21,
+  "Number of Successfully Processed Operations": 19,
+  "Percentage of Successfully Processed Operations": "90.48%",
+  "Number of Unique Server Errors": 1790,
+  "Operations with Server Errors": {
+    "updatePermissionUsingPUT": 8886,
+    "createRoleUsingPOST": 49,
+    "addPermissionOnRoleUsingPOST": 2,
+    "createPermissionUsingPOST": 1
+  }
+}

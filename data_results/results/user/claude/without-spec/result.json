@@ -1,0 +1,73 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "api_error_status": null,
+  "duration_ms": 421704,
+  "duration_api_ms": 416557,
+  "ttft_ms": 2440,
+  "ttft_stream_ms": 1670,
+  "time_to_request_ms": 341,
+  "num_turns": 26,
+  "result": "Here is the complete structured QA report.\n\n---\n\n# QA Test Report \u2014 User Management Service\n**Target:** `http://localhost:8080/`  \n**Spec:** `user-management.json` (Swagger 2.0)  \n**Tests executed:** 82 | **Passed:** 43 | **Bugs found:** 9\n\n---\n\n## BUGS FOUND\n\n### BUG-1 \u2014 POST /login: returns HTTP 400 for invalid credentials instead of 401\n\n**Description:** Authentication failures return `400 Bad Request` instead of `401 Unauthorized`.\n\n**Request:**\n```\nPOST /login\nContent-Type: application/json\n{\"username\": \"nonexistent_user_xyz\", \"password\": \"wrongpassword\"}\n```\n\n**Response:**\n```\nHTTP 400\n{\"message\":\"Invalid username or password\",\"timestamp\":1781892847433}\n```\n\n**Spec violation:** The spec defines `401 Unauthorized` as the response for authentication failure. HTTP 400 means \"bad request\" (malformed input), not \"wrong credentials.\" This makes it impossible for clients to distinguish bad input from rejected credentials.\n\n---\n\n### BUG-2 \u2014 Multiple write endpoints return HTTP 201 instead of 200\n\n**Description:** Every mutating endpoint returns `201 Created` for successful operations where the spec defines `200 OK` as the primary success code. The following endpoints are all affected:\n\n| Endpoint | Observed | Spec says |\n|---|---|---|\n| `POST /users` | 201 | 200 |\n| `PUT /users/{id}` | 201 | 200 |\n| `POST /users/register` | 201 | 200 |\n| `GET /users/rbac/salt` | 201 | 200 |\n| `POST /users/rbac/permissions` | 201 | 200 |\n| `PUT /users/rbac/permissions` | 201 | 200 |\n| `POST /users/rbac/roles` | 201 | 200 |\n| `POST /users/rbac/roles/{roleId}/permissions/{permissionKey}` | 201 | 200 |\n| `POST /users/{id}/roles/{roleId}` | 201 | 200 |\n\nThe worst case is `GET /users/rbac/salt` \u2014 a read-only GET endpoint returning `201 Created` is semantically nonsensical.\n\n**Example request/response:**\n```\nGET /users/rbac/salt\n\u2192 HTTP 201   (body: \"PWpLzrsSm3YVNeGbe89x1Ysd3ku0CgaD\")\n```\n\n**Spec violation:** All nine endpoints define `\"200\": {\"description\": \"OK\"}` as the primary success response. Clients that check for `== 200` will treat all successful responses as failures.\n\n---\n\n### BUG-3 \u2014 POST /users/rbac/roles: role name stored with extra JSON double-quotes\n\n**Description:** When creating a role by sending a JSON string body as specified, the service stores the value with the surrounding double-quote characters embedded in the name.\n\n**Request:**\n```\nPOST /users/rbac/roles\nContent-Type: application/json\n\"QA_TEST_ROLE\"\n```\n\n**Response:**\n```\nHTTP 201\n{\"id\":3,\"role\":\"\\\"QA_TEST_ROLE\\\"\",\"permissions\":[]}\n```\n\nThe `role` field is `\"\\\"QA_TEST_ROLE\\\"\"` \u2014 the name contains literal quote characters. Only by sending a raw unquoted string (not valid JSON) does the name store correctly. This means any spec-compliant client will create broken role names.\n\n**Spec violation:** The spec requires the body `schema: { \"type\": \"string\" }`. A JSON-conformant client sends a JSON string `\"ROLE_NAME\"`. The service must parse and store the string value, not the raw JSON token including its quotes.\n\n---\n\n### BUG-4 \u2014 POST /users/rbac/roles/{roleId}/permissions/{permissionKey}: auto-creates permission instead of returning 404\n\n**Description:** Adding a permission key that does not exist to a role silently creates a new permission record with that key and assigns it, rather than returning 404.\n\n**Request:**\n```\nPOST /users/rbac/roles/1/permissions/NONEXISTENT_XYZ_PERM\n```\n\n**Response:**\n```\nHTTP 201\n{\"id\":1,\"role\":\"USER\",\"permissions\":[\n  {\"id\":1,\"permission\":\"LOGIN\",...},\n  {\"id\":2,\"permission\":\"VIEW_PROFILE\",...},\n  {\"id\":10,\"permission\":\"NONEXISTENT_XYZ_PERM\",\"enabled\":true,\"note\":null}\n]}\n```\n\nA new permission with key `NONEXISTENT_XYZ_PERM` was silently created. Because the USER role got this permission, **all users in the USER role (all 8 seed users) inherited the phantom permission** \u2014 a data integrity cascade across the entire user base.\n\n**Spec violation:** The spec defines `404 Not Found` as a possible response. Adding a permission to a role should validate that the permission exists; it must not create new permissions as a side effect of this operation.\n\n---\n\n### BUG-5 \u2014 DELETE /users/rbac/roles/{roleId}/permissions/{permissionKey}: returns 200 even when permission was not on that role\n\n**Description:** Removing a permission from a role succeeds silently when the permission was never assigned to that role. No error is reported.\n\n**Request:**\n```\nDELETE /users/rbac/roles/1/permissions/ADMIN_STATISTICS\n(ADMIN_STATISTICS is not in the USER role)\n```\n\n**Response:**\n```\nHTTP 200\n{\"id\":1,\"role\":\"USER\",\"permissions\":[{\"id\":1,...},{\"id\":2,...}]}\n```\n\nThe response body is unchanged (correct) but the status is 200 instead of an error. Clients cannot detect whether the operation had any effect.\n\n**Spec violation:** The spec defines `200` (success with updated role) and `204` (no content). When the permission-to-role mapping does not exist, an appropriate 4xx response should indicate the relationship was not found.\n\n---\n\n### BUG-6 \u2014 POST /users: undocumented required field `phone` with undocumented format constraint\n\n**Description:** `POST /users` fails with `400` unless `phone` is provided, and the phone must match an undocumented format (must begin with `+` followed only by digits, e.g. `+12345678900`). This field and its validation rules are absent from the spec's `CreateOrUpdateUserDTO`.\n\n**Request (as per spec \u2014 no phone):**\n```\nPOST /users\nContent-Type: application/json\n{\"username\":\"user1\",\"name\":\"Test\",\"surname\":\"User\",\"email\":\"t@t.com\",\n \"password\":\"Str0ng@Pass!\",\"gender\":\"MALE\",\"enabled\":true}\n```\n\n**Response:**\n```\nHTTP 400\n{\"message\":\"The phone cannot be null or empty\",\"timestamp\":...}\n```\n\n**Another hidden constraint \u2014 password complexity:**\n```\nPOST /users\n...{\"password\":\"securepass123\"...}\n\u2192 HTTP 400 {\"message\":\"Password must to be at least 8 chars, 1 number, 1 upper case, 1 lower case letter, 1 special char, no spaces\"}\n```\n\n**Spec violation:** `CreateOrUpdateUserDTO` lists `phone` as an optional string field with no format constraint. Neither `phone` (required) nor password complexity rules are documented anywhere in the spec.\n\n---\n\n### BUG-7 \u2014 addressDTO returns `{all-null fields}` instead of `null` when no address is provided\n\n**Description:** For users created without address information, the `addressDTO` field in `UserDTO` is returned as an object with all-null fields rather than `null`.\n\n**Request:**\n```\nGET /users/9\n```\n\n**Response:**\n```json\n{\n  \"addressDTO\": {\"address\": null, \"address2\": null, \"city\": null, \"country\": null, \"zipCode\": null},\n  ...\n}\n```\n\n**Spec violation:** The spec defines `addressDTO` as `\"$ref\": \"#/definitions/AddressDTO\"` \u2014 an optional object. When not provided, it should be `null` (absent), not an object where every field is null. The two states are semantically different: one means \"no address on file,\" the other means \"address object with no data.\"\n\n---\n\n### BUG-8 \u2014 User seed data: jennifer (id=7) has `gender=\"MALE\"` but name is \"Jennifer\"\n\n**Description:** The initial data contains a clear inconsistency: user `jennifer` with `name=\"Jennifer\"` has `gender=\"MALE\"`.\n\n**Request:**\n```\nGET /users/7\n```\n\n**Response:**\n```json\n{\"id\":7,\"username\":\"jennifer\",\"name\":\"Jennifer\",\"gender\":\"MALE\",...}\n```\n\n**Spec violation:** While the spec does not enforce gender-name consistency, this indicates either a data entry bug in the seed data or that the API accepts logically contradictory data with no validation.\n\n---\n\n### BUG-9 \u2014 POST /users/register: undocumented password complexity enforcement\n\n**Description:** The `/register` endpoint also silently enforces password complexity rules (same as `/users`), but neither the spec's `RegisterUserAccountDTO` schema nor the endpoint description mentions this.\n\n**Request:**\n```\nPOST /users/register\n{\"username\":\"qa_reg_user\",\"name\":\"Reg\",\"surname\":\"User\",\n \"email\":\"reg@example.com\",\"password\":\"mypassword123\",\"gender\":\"FEMALE\"}\n```\n\n**Response:**\n```\nHTTP 400\n{\"message\":\"Password must to be at least 8 chars, 1 number, 1 upper case, 1 lower case letter, 1 special char, no spaces\"}\n```\n\n**Spec violation:** `RegisterUserAccountDTO` defines `password` as `type: string` with no constraints documented. A spec-compliant client has no way to know the password rules.\n\n---\n\n## CORRECT BEHAVIORS VERIFIED\n\n| Test | What was verified |\n|---|---|\n| T01\u2013T04 | `GET /users` returns 200 with `UserListDTO` structure, all `UserDTO` fields present |\n| T10\u2013T11 | `GET /users/1` returns correct user data |\n| T12 | `GET /users/99999` returns 404 |\n| T13\u2013T15 | `GET /users/0`, `GET /users/-1`, `GET /users/abc` all return 4xx (input validation) |\n| T19 | Duplicate username on `POST /users` returns 4xx conflict |\n| T20\u2013T21 | Empty/null body on `POST /users` returns 4xx (no crash) |\n| T22 | 1000-character username handled without 500 |\n| T23 | SQL injection in username returns 4xx (not 500, not bypassed) |\n| T26 | `PUT /users/99999` returns 404 |\n| T30 | `DELETE /users/99999` returns 404 |\n| T34 | Duplicate username on `POST /users/register` returns 4xx |\n| T35 | Empty body on `POST /users/register` returns 4xx (not 500) |\n| T38\u2013T40 | `GET /users/rbac/permissions` returns 200 with correct `PermissionDTO` array |\n| T43 | Duplicate permission key returns 4xx |\n| T44 | `GET /users/rbac/permissions/LOGIN` returns 200 |\n| T45 | `GET /users/rbac/permissions/NONEXISTENT` returns 404 |\n| T51 | `DELETE` non-existent permission returns 404 |\n| T52\u2013T54 | `GET /users/rbac/roles` returns 200 with correct `RoleDTO` array |\n| T57 | Duplicate role name returns 4xx |\n| T58\u2013T60 | Role GET by valid id returns 200; non-existent returns 404; string id returns 400 |\n| T63 | Adding permission to non-existent role returns 404 |\n| T71 | Adding role to non-existent user returns 404 |\n| T74 | `DELETE /users/rbac/roles/99999` returns 404 |\n| T75 | Wrong `Content-Type` returns 4xx |\n| T77 | 20KB+ request body handled without 500 |\n| T78 | `PATCH /users/1` returns 405 (method not allowed) |\n| T79 | Extra unknown query params ignored (returns 200) |\n| T80 | Unicode characters in name fields handled |\n| \u2014 | Deleting an in-use role returns 400 with clear message |\n| \u2014 | Deleting an in-use permission returns 400 with clear message |\n| \u2014 | `GET /users/rbac/salt` returns different value each call (entropy) |\n| \u2014 | Response `Content-Type: application/json` correctly set on all endpoints |\n| \u2014 | User's effective permissions correctly aggregate from all assigned roles |\n\n---\n\n## OVERALL VERDICT: **FAIL**\n\nThe service has multiple spec-violating bugs across critical areas. The most severe are:\n\n1. **Wrong HTTP status codes on virtually every write operation** (BUG-2) \u2014 nine endpoints return 201 where the spec mandates 200, including a GET endpoint returning 201. This breaks any client that checks the status code.\n\n2. **Ghost permission creation** (BUG-4) \u2014 adding a non-existent permission key to a role silently creates a new permission and assigns it, cascading phantom permissions to all users in that role. This is a data integrity and security issue.\n\n3. **Broken login status codes** (BUG-1) \u2014 returning 400 instead of 401 makes it impossible for clients to distinguish malformed requests from authentication failures.\n\n4. **Undocumented required fields** (BUG-6, BUG-9) \u2014 the spec-defined DTOs omit mandatory validation rules (`phone` required with format constraint, password complexity), making the spec insufficient for client implementation.\n\n5. **Role name corruption** (BUG-3) \u2014 spec-compliant JSON string bodies produce role names with embedded double-quote characters.\n\nThe service demonstrates functional CRUD logic and reasonable input validation for many paths, but the systematic status code misalignment and the ghost-permission security flaw make it unfit for production use as specified.",
+  "stop_reason": "end_turn",
+  "session_id": "8c9f611a-0a8e-4b92-9ecb-7597aa7257cd",
+  "total_cost_usd": 1.1760653,
+  "usage": {
+    "input_tokens": 28,
+    "cache_creation_input_tokens": 53533,
+    "cache_read_input_tokens": 1379781,
+    "output_tokens": 29334,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 53533,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 1,
+        "output_tokens": 3452,
+        "cache_read_input_tokens": 69041,
+        "cache_creation_input_tokens": 1797,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 1797
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 749,
+      "outputTokens": 18,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.000839,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000
+    },
+    "claude-sonnet-4-6": {
+      "inputTokens": 28,
+      "outputTokens": 29334,
+      "cacheReadInputTokens": 1379781,
+      "cacheCreationInputTokens": 53533,
+      "webSearchRequests": 0,
+      "costUSD": 1.1752263,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "uuid": "18234bc4-a856-419e-b2af-729e0f9e7f01",
+  "wall_time_ms": 422469
+}

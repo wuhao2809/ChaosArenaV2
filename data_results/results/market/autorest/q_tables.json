@@ -1,0 +1,1016 @@
+{
+  "OPERATION AGENT": {
+    "getCustomerUsingGET": 19.999999999999815,
+    "getCartUsingGET": 19.999999999999815,
+    "addItemUsingPUT": 19.999999999999815,
+    "clearCartUsingDELETE": 19.999999999999815,
+    "setDeliveryUsingPUT": 19.999999999999815,
+    "payByCardUsingPOST": 19.999999999999815,
+    "getContactsUsingGET": 19.999999999999815,
+    "updateContactsUsingPUT": 19.999999999999815,
+    "getOrdersUsingGET": 19.999999999999815,
+    "getOrderUsingGET": 19.999999999999815,
+    "getProductsUsingGET": 19.999999999999815,
+    "getProductUsingGET": 19.999999999999815,
+    "createCustomerUsingPOST": 19.999999999999815
+  },
+  "HEADER AGENT": "Disabled",
+  "PARAMETER AGENT": {
+    "getCustomerUsingGET": {
+      "params": {
+        "()": -2.0,
+        "(('name', 'query'),)": -2.0,
+        "None": -2.0
+      },
+      "body": {
+        "None": -5.999999999999979
+      }
+    },
+    "getCartUsingGET": {
+      "params": {
+        "()": -2.0000000000000027,
+        "(('name', 'query'),)": -2.0000000000000027,
+        "None": -2.000000000000002
+      },
+      "body": {
+        "None": -5.9999999999999725
+      }
+    },
+    "addItemUsingPUT": {
+      "params": {
+        "(('item', 'body'),)": -1.9997093357212397,
+        "(('item', 'body'), ('name', 'query'))": -1.9997093170203755,
+        "None": -1.9995477513150037
+      },
+      "body": {
+        "None": -5.998966404056627
+      }
+    },
+    "clearCartUsingDELETE": {
+      "params": {
+        "()": -2.0,
+        "(('name', 'query'),)": -2.0,
+        "None": -2.0
+      },
+      "body": {
+        "None": -5.999999999999982
+      }
+    },
+    "setDeliveryUsingPUT": {
+      "params": {
+        "(('included', 'query'),)": -1.9994572629407144,
+        "(('included', 'query'), ('name', 'query'))": -1.9994542228878585,
+        "None": -1.9991210134828419
+      },
+      "body": {
+        "None": -5.998032499311411
+      }
+    },
+    "payByCardUsingPOST": {
+      "params": {
+        "(('card', 'body'),)": -1.9991442201494156,
+        "(('card', 'body'), ('name', 'query'))": -1.9991440359659338,
+        "None": -1.9986116527097357
+      },
+      "body": {
+        "None": -5.99689990882509
+      }
+    },
+    "getContactsUsingGET": {
+      "params": {
+        "()": -2.0,
+        "(('name', 'query'),)": -2.0,
+        "None": -2.0
+      },
+      "body": {
+        "None": -5.999999999999981
+      }
+    },
+    "updateContactsUsingPUT": {
+      "params": {
+        "(('contactsDto', 'body'),)": -1.9996581084734748,
+        "(('contactsDto', 'body'), ('name', 'query'))": -1.9996588898648484,
+        "None": -1.9994476055308192
+      },
+      "body": {
+        "None": -5.998764603869114
+      }
+    },
+    "getOrdersUsingGET": {
+      "params": {
+        "()": -2.0000000000000018,
+        "(('name', 'query'),)": -2.0000000000000013,
+        "None": -2.0000000000000013
+      },
+      "body": {
+        "None": -5.999999999999973
+      }
+    },
+    "getOrderUsingGET": {
+      "params": {
+        "(('orderId', 'path'),)": -1.9995557186415402,
+        "(('orderId', 'path'), ('name', 'query'))": -1.9995560400936048,
+        "None": -1.9992748811349965
+      },
+      "body": {
+        "None": -5.998386639870111
+      }
+    },
+    "getProductsUsingGET": {
+      "params": {
+        "()": -2.7272727272727226,
+        "None": -2.7272727272727226
+      },
+      "body": {
+        "None": -5.454545454545435
+      }
+    },
+    "getProductUsingGET": {
+      "params": {
+        "(('productId', 'path'),)": -2.727118415763926,
+        "None": -2.7270495853965713
+      },
+      "body": {
+        "None": -5.454168001160492
+      }
+    },
+    "createCustomerUsingPOST": {
+      "params": {
+        "(('user', 'body'),)": -2.727024877917896,
+        "None": -2.7269104531380313
+      },
+      "body": {
+        "None": -5.453935331055949
+      }
+    }
+  },
+  "VALUE AGENT": {
+    "getCustomerUsingGET": {
+      "params": {},
+      "body": {}
+    },
+    "getCartUsingGET": {
+      "params": {},
+      "body": {}
+    },
+    "addItemUsingPUT": {
+      "params": {},
+      "body": {}
+    },
+    "clearCartUsingDELETE": {
+      "params": {},
+      "body": {}
+    },
+    "setDeliveryUsingPUT": {
+      "params": {},
+      "body": {}
+    },
+    "payByCardUsingPOST": {
+      "params": {},
+      "body": {}
+    },
+    "getContactsUsingGET": {
+      "params": {},
+      "body": {}
+    },
+    "updateContactsUsingPUT": {
+      "params": {},
+      "body": {}
+    },
+    "getOrdersUsingGET": {
+      "params": {},
+      "body": {}
+    },
+    "getOrderUsingGET": {
+      "params": {},
+      "body": {}
+    },
+    "getProductsUsingGET": {
+      "params": {},
+      "body": {}
+    },
+    "getProductUsingGET": {
+      "params": {},
+      "body": {}
+    },
+    "createCustomerUsingPOST": {
+      "params": {},
+      "body": {}
+    }
+  },
+  "BODY OBJECT AGENT": {
+    "getCustomerUsingGET": {},
+    "getCartUsingGET": {},
+    "addItemUsingPUT": {},
+    "clearCartUsingDELETE": {},
+    "setDeliveryUsingPUT": {},
+    "payByCardUsingPOST": {},
+    "getContactsUsingGET": {},
+    "updateContactsUsingPUT": {},
+    "getOrdersUsingGET": {},
+    "getOrderUsingGET": {},
+    "getProductsUsingGET": {},
+    "getProductUsingGET": {},
+    "createCustomerUsingPOST": {}
+  },
+  "DATA SOURCE AGENT": {
+    "getCustomerUsingGET": {
+      "LLM": -2.0,
+      "DEPENDENCY": -2.0,
+      "DEFAULT": -2.0
+    },
+    "getCartUsingGET": {
+      "LLM": -2.0000000000000027,
+      "DEPENDENCY": -2.000000000000002,
+      "DEFAULT": -2.000000000000002
+    },
+    "addItemUsingPUT": {
+      "LLM": -1.99965863514091,
+      "DEPENDENCY": -1.9996616293886362,
+      "DEFAULT": -1.9996461395270728
+    },
+    "clearCartUsingDELETE": {
+      "LLM": -2.0,
+      "DEPENDENCY": -2.0,
+      "DEFAULT": -2.0
+    },
+    "setDeliveryUsingPUT": {
+      "LLM": -1.9993518235764096,
+      "DEPENDENCY": -1.999341773409898,
+      "DEFAULT": -1.9993389023251076
+    },
+    "payByCardUsingPOST": {
+      "LLM": -1.9989708393651149,
+      "DEPENDENCY": -1.9989654780029427,
+      "DEFAULT": -1.9989635914570278
+    },
+    "getContactsUsingGET": {
+      "LLM": -2.0,
+      "DEPENDENCY": -2.0,
+      "DEFAULT": -2.0
+    },
+    "updateContactsUsingPUT": {
+      "LLM": -1.9995820621489309,
+      "DEPENDENCY": -1.9995849976441393,
+      "DEFAULT": -1.9995975440760725
+    },
+    "getOrdersUsingGET": {
+      "LLM": -2.0000000000000018,
+      "DEPENDENCY": -2.0000000000000018,
+      "DEFAULT": -2.0000000000000018
+    },
+    "getOrderUsingGET": {
+      "LLM": -1.999461539706236,
+      "DEPENDENCY": -1.9994623200543897,
+      "DEFAULT": -1.9994627801095164
+    },
+    "getProductsUsingGET": {
+      "LLM": -1.8181818181818372,
+      "DEPENDENCY": -1.8181818181818372,
+      "DEFAULT": -1.8181818181818372
+    },
+    "getProductUsingGET": {
+      "LLM": -1.8180531873322325,
+      "DEPENDENCY": -1.8180613580515763,
+      "DEFAULT": -1.8180534557766879
+    },
+    "createCustomerUsingPOST": {
+      "LLM": -1.817986711953815,
+      "DEPENDENCY": -1.817974623622204,
+      "DEFAULT": -1.8179739954799075
+    }
+  },
+  "DEPENDENCY AGENT": {
+    "getCustomerUsingGET": {
+      "params": {
+        "name|query": {
+          "getCartUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "addItemUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "clearCartUsingDELETE": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "setDeliveryUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "payByCardUsingPOST": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getContactsUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "updateContactsUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrdersUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrderUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          }
+        }
+      },
+      "body": {}
+    },
+    "getCartUsingGET": {
+      "params": {
+        "name|query": {
+          "getCustomerUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "addItemUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "clearCartUsingDELETE": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "setDeliveryUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "payByCardUsingPOST": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getContactsUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "updateContactsUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrdersUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrderUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          }
+        }
+      },
+      "body": {}
+    },
+    "addItemUsingPUT": {
+      "params": {
+        "name|query": {
+          "getCustomerUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getCartUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "clearCartUsingDELETE": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "setDeliveryUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "payByCardUsingPOST": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getContactsUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "updateContactsUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrdersUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrderUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          }
+        }
+      },
+      "body": {}
+    },
+    "clearCartUsingDELETE": {
+      "params": {
+        "name|query": {
+          "getCustomerUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getCartUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "addItemUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "setDeliveryUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "payByCardUsingPOST": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getContactsUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "updateContactsUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrdersUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrderUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          }
+        }
+      },
+      "body": {}
+    },
+    "setDeliveryUsingPUT": {
+      "params": {
+        "name|query": {
+          "getCustomerUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getCartUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "addItemUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "clearCartUsingDELETE": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "payByCardUsingPOST": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getContactsUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "updateContactsUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrdersUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrderUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          }
+        }
+      },
+      "body": {}
+    },
+    "payByCardUsingPOST": {
+      "params": {
+        "name|query": {
+          "getCustomerUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getCartUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "addItemUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "clearCartUsingDELETE": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "setDeliveryUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getContactsUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "updateContactsUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrdersUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrderUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          }
+        }
+      },
+      "body": {}
+    },
+    "getContactsUsingGET": {
+      "params": {
+        "name|query": {
+          "getCustomerUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getCartUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "addItemUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "clearCartUsingDELETE": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "setDeliveryUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "payByCardUsingPOST": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "updateContactsUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrdersUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrderUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          }
+        }
+      },
+      "body": {}
+    },
+    "updateContactsUsingPUT": {
+      "params": {
+        "name|query": {
+          "getCustomerUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getCartUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "addItemUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "clearCartUsingDELETE": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "setDeliveryUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "payByCardUsingPOST": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getContactsUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrdersUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrderUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          }
+        }
+      },
+      "body": {}
+    },
+    "getOrdersUsingGET": {
+      "params": {
+        "name|query": {
+          "getCustomerUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getCartUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "addItemUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "clearCartUsingDELETE": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "setDeliveryUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "payByCardUsingPOST": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getContactsUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "updateContactsUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrderUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          }
+        }
+      },
+      "body": {}
+    },
+    "getOrderUsingGET": {
+      "params": {
+        "name|query": {
+          "getCustomerUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getCartUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "addItemUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "clearCartUsingDELETE": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "setDeliveryUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "payByCardUsingPOST": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getContactsUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "updateContactsUsingPUT": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          },
+          "getOrdersUsingGET": {
+            "params": {
+              "name|query": 0
+            },
+            "body": {},
+            "response": {}
+          }
+        },
+        "orderId|path": {
+          "getProductUsingGET": {
+            "params": {
+              "productId|path": 0
+            },
+            "body": {},
+            "response": {}
+          }
+        }
+      },
+      "body": {}
+    },
+    "getProductsUsingGET": {
+      "params": {},
+      "body": {}
+    },
+    "getProductUsingGET": {
+      "params": {
+        "productId|path": {
+          "getOrderUsingGET": {
+            "params": {
+              "orderId|path": 0
+            },
+            "body": {},
+            "response": {}
+          }
+        }
+      },
+      "body": {}
+    },
+    "createCustomerUsingPOST": {
+      "params": {},
+      "body": {}
+    }
+  }
+}

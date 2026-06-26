@@ -1,0 +1,85 @@
+bug_id,service,description,category,severity,found_by_chaosarena,found_by_claude_code,found_by_autoresttest,chaosarena_ref,claude_ref,autorest_ref,chaosarena_occurrences,claude_occurrences,autorest_occurrences,notes,chaosarena_phase
+B01,market,Concurrent addItem same product: lost quantity update (qty stays 1 instead of 2),Concurrency,CRITICAL/HIGH,TRUE,FALSE,FALSE,R1,,,2,0,0,Exploratory #1 is a dup of R1,required
+B02,market,Concurrent pay+addItem: stale cart not cleared after payment (race-added item persists),Concurrency,CRITICAL/HIGH,TRUE,FALSE,FALSE,R3,,,6,0,0,Exploratory #5/#12/#17/#21/#25 are dups of R3 (5 identical entries),required
+B03,market,Concurrent clearCart+pay: Hibernate StaleStateException surfaces as 500,Concurrency,CRITICAL/HIGH,TRUE,FALSE,FALSE,R4,,,2,0,0,Exploratory #7 is a dup of R4,required
+B04,market,Concurrent duplicate registration: both requests return 500 NonUniqueResultException,Concurrency,CRITICAL/HIGH,TRUE,FALSE,FALSE,R5,,,2,0,0,Exploratory #6 is a dup of R5,required
+B05,market,IDOR: Any authenticated user can read any order by guessing orderId,Auth/IDOR,CRITICAL/HIGH,TRUE,TRUE,FALSE,"R13, Exploratory #4/#11/#16/#20/#24/#29/#33",BUG-2,,8,1,0,,required
+B06,market,IDOR on payment: name query-param ignored — server returns 406 for any user's cart,Auth/IDOR,CRITICAL/HIGH,TRUE,TRUE,FALSE,"R12, Exploratory #3/#10/#15/#19/#23",BUG-3,,6,1,0,,required
+B07,market,Unauthenticated POST /customer/cart/pay returns 406 instead of 401,Auth,CRITICAL/HIGH,TRUE,TRUE,FALSE,"R14, Exploratory #2/#9/#13/#14/#18/#22/#26",BUG-1,,8,1,0,,required
+B08,market,deliveryIncluded=false does not reduce cart totalCost displayed to user,Business Logic,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #30/#31/#32,,,3,0,0,,exploration
+B09,market,Unavailable product (available=false) silently not added to cart — no error returned,Business Logic,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #27,,,1,0,0,,exploration
+B10,market,No upper-bound validation on cart item quantity (accepts 999999),Input Validation,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #28/#34,,,2,0,0,,exploration
+B11,market,All input validation errors return 406 Not Acceptable instead of 400 Bad Request,HTTP Semantics,CRITICAL/HIGH,TRUE,TRUE,FALSE,R16/R17/R18/R22/R23,BUG-4,,5,1,0,,required
+B12,market,setDelivery endpoint: missing required 'included' param returns 500 instead of 400,HTTP Semantics,CRITICAL/HIGH,TRUE,FALSE,FALSE,R25,,,1,0,0,,required
+B13,market,GET /products/{non-numeric-id}: type conversion failure returns 500 instead of 400,HTTP Semantics,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #36,,,1,0,0,,exploration
+B14,market,Empty cart payment returns 406 Not Acceptable instead of 400,HTTP Semantics,CRITICAL/HIGH,TRUE,FALSE,FALSE,R16,,,1,0,0,,required
+B15,market,addItem with zero or negative quantity returns 406 instead of 400,HTTP Semantics,CRITICAL/HIGH,TRUE,FALSE,FALSE,R17,,,1,0,0,,required
+B16,market,Invalid credit card number returns 406 instead of 400,HTTP Semantics,CRITICAL/HIGH,TRUE,FALSE,FALSE,R18,,,1,0,0,,required
+B17,market,Oversize registration fields (>50 chars) return 406 instead of 400,HTTP Semantics,CRITICAL/HIGH,TRUE,FALSE,FALSE,R22,,,1,0,0,,required
+B18,market,Contacts update with forbidden characters or invalid phone format returns 406 instead of 400,HTTP Semantics,CRITICAL/HIGH,TRUE,FALSE,FALSE,R23,,,1,0,0,,required
+B19,market,Null byte character accepted and stored in address field,Input Validation,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #37,,,1,0,0,,exploration
+B20,market,"Response shape inconsistency: GET /orders returns 'links' array only for paginated results, not for single-order fetch",API Design,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #38,,,1,0,0,,exploration
+B21,market,POST /customer/register returns 406 for duplicate email instead of 409 Conflict,HTTP Semantics,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-5,,0,1,0,,
+B22,market,GET /products returns empty array [] with 200 when no products exist instead of 404,HTTP Semantics,LOW,FALSE,TRUE,FALSE,,BUG-6,,0,1,0,,
+B23,market,DELETE /customer/cart/{cartId} returns 200 on non-existent cart instead of 404,HTTP Semantics,LOW,FALSE,TRUE,FALSE,,BUG-7,,0,1,0,,
+T01,tracking,Concurrent POST duplicate assignment returns 400+SQL constraint leak,Concurrency,CRITICAL/HIGH,TRUE,FALSE,FALSE,R1,,,2,0,0,Exploratory #1 is a dup,required
+T02,tracking,Concurrent DELETE same assignment returns 400+Hibernate StaleStateException,Concurrency,CRITICAL/HIGH,TRUE,FALSE,FALSE,R2,,,1,0,0,,required
+T03,tracking,Concurrent PUT same assignment: endpoint does INSERT not UPDATE causing PK conflict,Concurrency,CRITICAL/HIGH,TRUE,FALSE,FALSE,R4,,,1,0,0,,required
+T04,tracking,All API endpoints accessible without authentication — no auth enforcement,Auth,CRITICAL/HIGH,TRUE,TRUE,FALSE,R5/R6/R7/R8/R9/R10/R11,BUG-1,,7,1,0,,required
+T05,tracking,IDOR: assignment data (salary + credential hash) readable by any caller,Auth/IDOR,CRITICAL/HIGH,TRUE,TRUE,FALSE,"R5, Exploratory #1/#3/#5/#7/#10",BUG-2,,6,1,0,,required
+T06,tracking,IDOR: employee profile including salary accessible without authorization,Auth/IDOR,CRITICAL/HIGH,TRUE,TRUE,FALSE,"R6, Exploratory #2/#4/#6/#8/#11",BUG-3,,6,1,0,,required
+T07,tracking,Credential store returns all password hashes and roles without authorization,Auth/IDOR,CRITICAL/HIGH,TRUE,TRUE,FALSE,"R8, Exploratory #9",BUG-4,,2,1,0,,required
+T08,tracking,IDOR: manager-project-data accessible for any employee without role check,Auth/IDOR,CRITICAL/HIGH,TRUE,FALSE,FALSE,"R10, Exploratory #12",,,2,0,0,,required
+T09,tracking,Role escalation via unauthenticated PUT /api/credentials/update,Auth,CRITICAL/HIGH,TRUE,TRUE,FALSE,"R9, Exploratory #15",BUG-5,,2,1,0,,required
+T10,tracking,POST /api/credentials/save stores password in plaintext (PUT hashes it),Auth/Security,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #17,,,1,0,0,,exploration
+T11,tracking,No auth enforcement on project mutation endpoints — unauthenticated CRUD,Auth,CRITICAL/HIGH,TRUE,TRUE,FALSE,"R7, Exploratory #13/#16",BUG-6,,3,1,0,,required
+T12,tracking,commitMgrDesc field (manager-only annotation) writable by any caller,Auth,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #14,,,1,0,0,,exploration
+T13,tracking,Assignment GET response embeds full employee+credential graph including password hashes,Auth/IDOR,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #20,,,1,0,0,,exploration
+T14,tracking,PUT /api/employees/{id} allows setting salary to negative values,Input Validation,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-7,,0,1,0,,
+T15,tracking,POST /api/employees allows duplicate employee with same name/email,Business Logic,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-8,,0,1,0,,
+T16,tracking,GET /api/assignments/{empId}/{projId} completely broken — returns wrong assignment,HTTP Semantics,CRITICAL/HIGH,TRUE,TRUE,FALSE,Exploratory #21,BUG-9,,1,1,0,,exploration
+T17,tracking,DELETE /api/assignments/{id} returns 200 on non-existent ID instead of 404,HTTP Semantics,LOW,FALSE,TRUE,FALSE,,BUG-10,,0,1,0,,
+T18,tracking,Project endDate before startDate accepted without validation,Input Validation,CRITICAL/HIGH,TRUE,FALSE,FALSE,R15,,,1,0,0,,required
+T19,tracking,Arbitrary or undefined role value in Credential body accepted without validation,Input Validation,CRITICAL/HIGH,TRUE,FALSE,FALSE,R16,,,1,0,0,,required
+T20,tracking,PUT /api/projects/{id} returns 200 on non-existent project instead of 404,HTTP Semantics,LOW,FALSE,TRUE,FALSE,,BUG-11,,0,1,0,,
+T21,tracking,PUT on non-existent resource ID creates new record instead of returning 404,HTTP Semantics,CRITICAL/HIGH,TRUE,TRUE,FALSE,Exploratory #18,BUG-12,,1,1,0,,exploration
+T22,tracking,GET /api/employees returns 200 with empty list instead of 404 when none exist,HTTP Semantics,LOW,FALSE,TRUE,FALSE,,BUG-13,,0,1,0,,
+T23,tracking,POST /api/assignments/save with missing required fields returns 500 instead of 400,HTTP Semantics,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-14,,0,1,0,,
+T24,tracking,POST /api/employees with empty body returns 500 instead of 400,HTTP Semantics,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-15,,0,1,0,,
+T25,tracking,Server-side DB error misclassified as 400 Bad Request with Hibernate exception trace,HTTP Semantics,CRITICAL/HIGH,TRUE,TRUE,FALSE,R1/R2/R4,BUG-16,,3,1,0,,required
+T26,tracking,PUT /api/employees/{id} with empty body returns 500 NullPointerException,HTTP Semantics,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-17,,0,1,0,,
+T27,tracking,POST /api/credentials/save with malformed body returns 500 instead of 400,HTTP Semantics,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-18,,0,1,0,,
+T28,tracking,DELETE /api/employees/{id} with assigned employee returns 500 with FK constraint error,HTTP Semantics,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-19,,0,1,0,,
+T29,tracking,Exception messages expose internal Java class names and ORM configuration,Security,CRITICAL/HIGH,TRUE,TRUE,FALSE,R1/R2/R4,BUG-20,,3,1,0,,required
+T30,tracking,GET /api/departments/{id} returns 200 with null body for non-existent department,HTTP Semantics,LOW,FALSE,TRUE,FALSE,,BUG-21,,0,1,0,,
+T31,tracking,POST /api/assignments/save allows duplicate composite key — no uniqueness enforcement,Business Logic,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #22,,,1,0,0,,exploration
+T32,tracking,Non-existent employee/manager ID returns 200 with empty collection instead of 404,HTTP Semantics,LOW,FALSE,TRUE,FALSE,Exploratory #19,BUG-22,,1,1,0,,exploration
+T33,tracking,Cascade deletion of 5 employees and 21 assignments via DELETE /api/departments/{id},Business Logic,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-23,,0,1,0,,
+U01,user-management,Concurrent registration with same username: duplicate request returns 500 ConstraintViolation,Concurrency,CRITICAL/HIGH,TRUE,FALSE,FALSE,R1,,,2,0,0,,required
+U02,user-management,Concurrent role assign + global role delete: both operations proceed causing 500 ConstraintViolation,Concurrency,CRITICAL/HIGH,TRUE,FALSE,FALSE,R2,,,5,0,0,,required
+U03,user-management,Concurrent permission delete + role assignment: assignment references deleted permission causing 500 ConstraintViolation,Concurrency,CRITICAL/HIGH,TRUE,FALSE,FALSE,R3,,,2,0,0,,required
+U04,user-management,Concurrent duplicate admin user creation: second request returns 500 ConstraintViolation,Concurrency,CRITICAL/HIGH,TRUE,FALSE,FALSE,R4,,,1,0,0,,required
+U05,user-management,IDOR: any caller reads another user's full profile (name/email/roles),Auth/IDOR,CRITICAL/HIGH,TRUE,TRUE,FALSE,"R5, Exploratory #2/#6/#10/#13/#17/#21/#25",BUG-1,,8,1,0,,required
+U06,user-management,IDOR: any caller modifies (PUT) another user's account data without authorization,Auth/IDOR,CRITICAL/HIGH,TRUE,TRUE,FALSE,"R6, Exploratory #3/#7/#11/#14/#18/#22/#26",BUG-2,,8,1,0,,required
+U07,user-management,IDOR: any caller deletes another user's account without authorization,Auth/IDOR,CRITICAL/HIGH,TRUE,TRUE,FALSE,"R6, Exploratory #4/#8/#12/#15/#19/#23/#27/#34",BUG-3,,9,1,0,,required
+U08,user-management,Privilege escalation: any caller assigns admin role to any user via POST /users/rbac/userroles,Auth,CRITICAL/HIGH,TRUE,FALSE,FALSE,R7,,,1,0,0,,required
+U09,user-management,All RBAC management endpoints (roles/permissions read+write) accessible without authentication,Auth,CRITICAL/HIGH,TRUE,TRUE,FALSE,"R8, Exploratory #36",BUG-6,,2,1,0,,required
+U10,user-management,Anonymous access to all user listing and individual user endpoints,Auth,CRITICAL/HIGH,TRUE,FALSE,FALSE,R9,,,1,0,0,,required
+U11,user-management,Salt generation endpoint accessible without authentication — potential crypto exposure,Auth,CRITICAL/HIGH,TRUE,FALSE,FALSE,R10,,,1,0,0,,required
+U12,user-management,Login for disabled user account returns 400 instead of 401/403,HTTP Semantics,CRITICAL/HIGH,TRUE,FALSE,FALSE,"R11, Exploratory #40",,,2,0,0,,required
+U13,user-management,Delete role currently assigned to users returns 400 instead of 409 Conflict,HTTP Semantics,CRITICAL/HIGH,TRUE,FALSE,FALSE,R17,,,1,0,0,,required
+U14,user-management,Delete permission currently assigned to roles returns 400 instead of 409 Conflict,HTTP Semantics,CRITICAL/HIGH,TRUE,FALSE,FALSE,R18,,,1,0,0,,required
+U15,user-management,Any caller can disable or re-enable any user account via unauthenticated endpoint,Auth,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #31/#32,,,2,0,0,,exploration
+U16,user-management,PUT /users/rbac/permissions returns 500 when request body lacks required fields,HTTP Semantics,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #35,,,1,0,0,,exploration
+U17,user-management,Empty string username accepted on POST /users/register — bypasses uniqueness check,Input Validation,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #39,,,1,0,0,,exploration
+U18,user-management,Login error message reveals account status enabling username enumeration,Security,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #41,,,1,0,0,,exploration
+U19,user-management,Role names stored with surrounding double-quote characters when created via API,API Design,CRITICAL/HIGH,TRUE,FALSE,FALSE,Exploratory #42,,,1,0,0,,exploration
+U20,user-management,POST /users/register with existing username returns 500 instead of 409 Conflict,HTTP Semantics,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-11,,0,1,0,,
+U21,user-management,GET /users/{id} returns 500 for non-existent user instead of 404,HTTP Semantics,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-12,,0,1,0,,
+U22,user-management,PUT /users/{id} with non-existent ID returns 500 instead of 404,HTTP Semantics,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-13,,0,1,0,,
+U23,user-management,POST /users requires undocumented mandatory 'phone' field absent from spec schema,API Design,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-4,,0,1,0,,
+U24,user-management,POST /users/rbac/permissions with duplicate key returns 404 Not Found instead of 409 Conflict,HTTP Semantics,CRITICAL/HIGH,FALSE,TRUE,FALSE,,BUG-5,,0,1,0,,
+U25,user-management,POST /login returns 400 Bad Request instead of 401 Unauthorized for invalid credentials,HTTP Semantics,LOW,FALSE,TRUE,FALSE,,BUG-9,,0,1,0,,
+U26,user-management,GET /users/rbac/salt returns 201 Created instead of 200 OK (GET must not return 201),HTTP Semantics,LOW,FALSE,TRUE,FALSE,,BUG-7,,0,1,0,,
+U27,user-management,Multiple mutation operations return 201 instead of spec-defined 200 (including PUT),HTTP Semantics,LOW,FALSE,TRUE,FALSE,,BUG-8,,0,1,0,,
+U28,user-management,updatedDt field is null on newly registered or created users,Data Integrity,LOW,FALSE,TRUE,FALSE,,BUG-10,,0,1,0,,

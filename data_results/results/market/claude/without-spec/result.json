@@ -1,0 +1,73 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "api_error_status": null,
+  "duration_ms": 552152,
+  "duration_api_ms": 536342,
+  "ttft_ms": 1958,
+  "ttft_stream_ms": 1554,
+  "time_to_request_ms": 357,
+  "num_turns": 15,
+  "result": "---\n\n## Black-Box QA Report \u2014 Summary\n\n**Verdict: FAIL** \u2014 8 bugs confirmed across 38+ verified behaviors.\n\n---\n\n### Bugs Found (8)\n\n| # | Bug | Severity |\n|---|-----|----------|\n| BUG-01 | `totalCost` doesn't update when `deliveryIncluded=false` \u2014 delivery always added to total | **High** |\n| BUG-02 | `totalItems` counts distinct product lines (2), not total quantity (e.g., 8 for qty=5+3) | Medium |\n| BUG-03 | Adding `available=false` product returns `200 OK` with unchanged cart (silent failure) | Medium |\n| BUG-04 | **Authorization breach**: any authenticated user can read any order by ID (Bob reads Alice's order) | **Critical** |\n| BUG-05 | `dateCreated` time truncated to midnight in `GET /customer/orders` and `GET /customer/orders/{id}` | High |\n| BUG-06 | HTTP **500** returned for client-input errors (missing body, malformed JSON, wrong type, missing required param) | High |\n| BUG-07 | Input validation errors use HTTP **406 Not Acceptable** instead of 400/422 (semantically wrong per RFC 7231) | Medium |\n| BUG-08 | Duplicate registration returns **406** instead of **409 Conflict** | Low |\n\n---\n\n### Key Correct Behaviors Verified (38 tests)\n- Product listing/retrieval, auth enforcement (401), method-not-allowed (405)\n- Registration field validation (email pattern, phone pattern, password length/chars, address chars)\n- Cart operations: add/clear/delivery flag, qty validation, nonexistent product \u2192 404\n- `productsCost` calculation is correct; `totalCost` correct when delivery is ON\n- Payment: CC validation enforced, empty-cart rejected, `payed=true` after payment, cart cleared\n- Order listing/retrieval and 404 for nonexistent orders\n\nThe full report is saved to `results/market_qa_report.md`.",
+  "stop_reason": "end_turn",
+  "session_id": "89276b27-aac1-4575-9a2c-7822301361b8",
+  "total_cost_usd": 1.1531594,
+  "usage": {
+    "input_tokens": 17,
+    "cache_creation_input_tokens": 63549,
+    "cache_read_input_tokens": 627958,
+    "output_tokens": 38840,
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 63549,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 1,
+        "output_tokens": 511,
+        "cache_read_input_tokens": 75648,
+        "cache_creation_input_tokens": 5206,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 5206
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 747,
+      "outputTokens": 16,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.000827,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000
+    },
+    "claude-sonnet-4-6": {
+      "inputTokens": 17,
+      "outputTokens": 38840,
+      "cacheReadInputTokens": 627958,
+      "cacheCreationInputTokens": 63549,
+      "webSearchRequests": 0,
+      "costUSD": 1.1523324,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "uuid": "bb9a4557-dfbf-48df-ad37-4e5af1792456",
+  "wall_time_ms": 552943
+}

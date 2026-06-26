@@ -1,0 +1,36 @@
+{
+  "Title": "AutoRestTest Report for 'Project Tracking System' (tracking-system-oas3)",
+  "Duration": "1200 seconds",
+  "Total Requests Sent": 98787,
+  "Status Code Distribution": {
+    "400": 76222,
+    "200": 21970,
+    "404": 234,
+    "405": 324,
+    "500": 37
+  },
+  "Input Tokens":322583,
+  "Output Tokens":143486,
+"Total Tokens":466069,
+  "Number of Total Operations": 67,
+  "Number of Successfully Processed Operations": 46,
+  "Percentage of Successfully Processed Operations": "68.66%",
+  "Number of Unique Server Errors": 33,
+  "Operations with Server Errors": {
+    "findByEmployeeIdAndProjectIdUsingGET": 5,
+    "findByDepartmentIdUsingGET": 1,
+    "findByUsernameUsingGET_1": 1,
+    "findAllByEmployeeIdAndManagerIdUsingGET": 6,
+    "findByIdUsingGET_3": 1,
+    "findByProjectIdUsingGET": 2,
+    "findManagerProjectDataByEmployeeIdUsingGET": 2,
+    "findByIdUsingGET_5": 3,
+    "findByIdUsingGET_2": 2,
+    "findByEmployeeIdAndProjectIdAndCommitDateUsingGET": 4,
+    "findByIdUsingGET_1": 1,
+    "findByIdUsingGET": 4,
+    "findByIdUsingGET_4": 1,
+    "findByUsernameUsingGET": 3,
+    "findByEmployeeProjectDataEmployeeIdUsingGET": 1
+  }
+}

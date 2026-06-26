@@ -1,0 +1,44 @@
+{
+  "getCustomerUsingGET": {
+    "name|query": []
+  },
+  "getCartUsingGET": {
+    "name|query": []
+  },
+  "addItemUsingPUT": {
+    "item|body": [],
+    "name|query": []
+  },
+  "clearCartUsingDELETE": {
+    "name|query": []
+  },
+  "setDeliveryUsingPUT": {
+    "included|query": [],
+    "name|query": []
+  },
+  "payByCardUsingPOST": {
+    "card|body": [],
+    "name|query": []
+  },
+  "getContactsUsingGET": {
+    "name|query": []
+  },
+  "updateContactsUsingPUT": {
+    "contactsDto|body": [],
+    "name|query": []
+  },
+  "getOrdersUsingGET": {
+    "name|query": []
+  },
+  "getOrderUsingGET": {
+    "name|query": [],
+    "orderId|path": []
+  },
+  "getProductsUsingGET": {},
+  "getProductUsingGET": {
+    "productId|path": []
+  },
+  "createCustomerUsingPOST": {
+    "user|body": []
+  }
+}

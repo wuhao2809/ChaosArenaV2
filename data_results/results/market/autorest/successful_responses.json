@@ -1,0 +1,15 @@
+{
+  "getCustomerUsingGET": {},
+  "getCartUsingGET": {},
+  "addItemUsingPUT": {},
+  "clearCartUsingDELETE": {},
+  "setDeliveryUsingPUT": {},
+  "payByCardUsingPOST": {},
+  "getContactsUsingGET": {},
+  "updateContactsUsingPUT": {},
+  "getOrdersUsingGET": {},
+  "getOrderUsingGET": {},
+  "getProductsUsingGET": {},
+  "getProductUsingGET": {},
+  "createCustomerUsingPOST": {}
+}

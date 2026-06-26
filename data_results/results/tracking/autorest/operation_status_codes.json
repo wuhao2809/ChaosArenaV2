@@ -1,0 +1,320 @@
+{
+  "findByEmployeeIdAndProjectIdUsingGET": {
+    "400": 800,
+    "200": 507,
+    "404": 1,
+    "500": 5,
+    "405": 2
+  },
+  "authenticateUsingPOST": {
+    "400": 1042,
+    "200": 3,
+    "405": 1
+  },
+  "saveUsingPOST_2": {
+    "400": 610,
+    "200": 455,
+    "405": 3
+  },
+  "saveUsingPOST_11": {
+    "400": 633,
+    "200": 386,
+    "405": 1
+  },
+  "findAllUsingGET": {
+    "200": 1002,
+    "405": 1
+  },
+  "findByIdUsingGET_2": {
+    "200": 1,
+    "400": 1004,
+    "405": 2,
+    "500": 2
+  },
+  "saveUsingPOST_7": {
+    "400": 11281,
+    "405": 41
+  },
+  "updateUsingPUT_7": {
+    "400": 1040,
+    "405": 3
+  },
+  "deleteByIdUsingDELETE_9": {
+    "400": 764,
+    "200": 239,
+    "405": 6
+  },
+  "findAllUsingGET_2": {
+    "200": 1043,
+    "405": 1
+  },
+  "authenticateUsingPOST_1": {
+    "400": 979,
+    "405": 7
+  },
+  "deleteByIdUsingDELETE_11": {
+    "400": 880,
+    "200": 199
+  },
+  "findAllUsingGET_10": {
+    "200": 1072,
+    "400": 2,
+    "405": 2
+  },
+  "deleteByIdUsingDELETE_1": {
+    "400": 1093,
+    "405": 9
+  },
+  "findByIdUsingGET": {
+    "400": 1018,
+    "404": 1,
+    "405": 1,
+    "500": 4
+  },
+  "deleteByIdUsingDELETE_5": {
+    "400": 1074,
+    "405": 6
+  },
+  "findByDepartmentIdUsingGET": {
+    "400": 609,
+    "500": 1,
+    "200": 444,
+    "404": 1,
+    "405": 3
+  },
+  "updateUsingPUT_9": {
+    "400": 561,
+    "200": 420,
+    "405": 3
+  },
+  "findByUsernameUsingGET": {
+    "400": 854,
+    "404": 107,
+    "405": 4,
+    "200": 108,
+    "500": 3
+  },
+  "updateUsingPUT_10": {
+    "400": 597,
+    "200": 386,
+    "405": 4
+  },
+  "saveUsingPOST_6": {
+    "400": 997,
+    "405": 1
+  },
+  "deleteByIdUsingDELETE_8": {
+    "400": 819,
+    "200": 184,
+    "405": 6
+  },
+  "findAllUsingGET_6": {
+    "200": 1047,
+    "405": 3
+  },
+  "saveUsingPOST_1": {
+    "400": 1449,
+    "405": 6
+  },
+  "findAllUsingGET_11": {
+    "200": 1024
+  },
+  "updateUsingPUT_6": {
+    "400": 1004,
+    "405": 1
+  },
+  "findAllUsingGET_3": {
+    "200": 1018,
+    "405": 2,
+    "400": 1
+  },
+  "updateUsingPUT_2": {
+    "400": 594,
+    "200": 427,
+    "405": 2
+  },
+  "updateUsingPUT_4": {
+    "400": 1043,
+    "405": 2
+  },
+  "saveUsingPOST_10": {
+    "400": 605,
+    "200": 397,
+    "405": 4
+  },
+  "findByIdUsingGET_4": {
+    "400": 841,
+    "200": 234,
+    "405": 1,
+    "500": 1
+  },
+  "findByUsernameUsingGET_1": {
+    "400": 872,
+    "404": 121,
+    "200": 69,
+    "405": 4,
+    "500": 1
+  },
+  "updateUsingPUT_3": {
+    "400": 624,
+    "200": 407
+  },
+  "findAllUsingGET_7": {
+    "200": 1081,
+    "400": 1
+  },
+  "deleteByUsernameUsingDELETE": {
+    "400": 986,
+    "200": 17,
+    "405": 22
+  },
+  "updateUsingPUT": {
+    "400": 1504,
+    "405": 7,
+    "200": 1
+  },
+  "findByIdUsingGET_3": {
+    "400": 1038,
+    "500": 1,
+    "405": 2,
+    "200": 1
+  },
+  "deleteByIdUsingDELETE_7": {
+    "400": 982,
+    "405": 1
+  },
+  "findAllUsingGET_5": {
+    "200": 1070,
+    "400": 1
+  },
+  "saveUsingPOST": {
+    "400": 18203,
+    "405": 73,
+    "200": 12
+  },
+  "deleteByIdUsingDELETE_6": {
+    "400": 988,
+    "405": 3
+  },
+  "findByEmployeeProjectDataEmployeeIdUsingGET": {
+    "400": 587,
+    "200": 439,
+    "500": 1
+  },
+  "findByEmployeeIdAndProjectIdAndCommitDateUsingGET": {
+    "400": 997,
+    "404": 2,
+    "405": 6,
+    "500": 4
+  },
+  "findByProjectIdUsingGET": {
+    "200": 469,
+    "400": 559,
+    "500": 2,
+    "405": 1
+  },
+  "saveUsingPOST_9": {
+    "400": 625,
+    "200": 406,
+    "405": 7
+  },
+  "findByIdUsingGET_1": {
+    "400": 708,
+    "200": 252,
+    "405": 2,
+    "500": 1
+  },
+  "deleteByIdUsingDELETE_2": {
+    "400": 725,
+    "200": 289,
+    "405": 3
+  },
+  "saveUsingPOST_8": {
+    "400": 606,
+    "200": 445
+  },
+  "saveUsingPOST_5": {
+    "400": 1045,
+    "405": 7
+  },
+  "findManagerProjectDataByEmployeeIdUsingGET": {
+    "400": 616,
+    "200": 437,
+    "405": 2,
+    "500": 2
+  },
+  "findAllUsingGET_4": {
+    "200": 1031,
+    "400": 2
+  },
+  "updateUsingPUT_5": {
+    "400": 1028,
+    "405": 3
+  },
+  "deleteByUsernameUsingDELETE_1": {
+    "400": 1041,
+    "405": 13
+  },
+  "deleteByIdUsingDELETE_3": {
+    "400": 964,
+    "200": 96,
+    "405": 7
+  },
+  "deleteByIdUsingDELETE": {
+    "400": 993,
+    "405": 8
+  },
+  "updateUsingPUT_11": {
+    "400": 604,
+    "200": 412
+  },
+  "deleteByIdUsingDELETE_10": {
+    "400": 804,
+    "200": 165,
+    "405": 2
+  },
+  "updateUsingPUT_1": {
+    "400": 1073,
+    "405": 11
+  },
+  "findAllByEmployeeIdAndManagerIdUsingGET": {
+    "400": 1019,
+    "404": 1,
+    "500": 6,
+    "405": 1
+  },
+  "saveUsingPOST_3": {
+    "400": 571,
+    "200": 442,
+    "405": 2
+  },
+  "findAllUsingGET_1": {
+    "200": 1045,
+    "400": 2
+  },
+  "deleteByIdUsingDELETE_4": {
+    "400": 1002,
+    "405": 2
+  },
+  "findAllUsingGET_8": {
+    "200": 1033,
+    "400": 2
+  },
+  "saveUsingPOST_4": {
+    "400": 1784,
+    "405": 5
+  },
+  "updateUsingPUT_8": {
+    "400": 636,
+    "200": 429
+  },
+  "findByIdUsingGET_5": {
+    "400": 836,
+    "200": 273,
+    "405": 2,
+    "500": 3
+  },
+  "findAllUsingGET_9": {
+    "200": 1053
+  }
+}

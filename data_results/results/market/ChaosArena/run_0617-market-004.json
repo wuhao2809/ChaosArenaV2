@@ -1,0 +1,1731 @@
+{
+  "run_id": "0617-market-004",
+  "eval_mode": "orchestrated_cover_all",
+  "verdict": "FAIL",
+  "reasoning": "Multi-agent orchestration aggregate verdict.\n\nBatch results:\n- batch01_R1-R1 (R1): FAIL, covered 1/1, turns=6, tools=6\n- batch02_R2-R2 (R2): PASS, covered 1/1, turns=4, tools=4\n- batch03_R3-R3 (R3): FAIL, covered 1/1, turns=10, tools=10\n- batch04_R4-R4 (R4): FAIL, covered 1/1, turns=7, tools=7\n- batch05_R5-R5 (R5): FAIL, covered 1/1, turns=3, tools=3\n- batch06_R6-R7 (R6, R7): PASS, covered 2/2, turns=5, tools=8\n- batch07_R8-R9 (R8, R9): PASS, covered 2/2, turns=6, tools=8\n- batch08_R10-R11 (R10, R11): PASS, covered 2/2, turns=5, tools=12\n- batch09_R12-R13 (R12, R13): FAIL, covered 2/2, turns=8, tools=14\n- batch10_R14-R15 (R14, R15): FAIL, covered 2/2, turns=3, tools=7\n- batch11_R16-R18 (R16, R17, R18): FAIL, covered 3/3, turns=5, tools=12\n- batch12_R19-R21 (R19, R20, R21): PASS, covered 3/3, turns=4, tools=13\n- batch13_R22-R24 (R22, R23, R24): FAIL, covered 3/3, turns=3, tools=11\n- batch14_R25-R25 (R25): FAIL, covered 1/1, turns=3, tools=3\n- exploration (): FAIL, covered 0/0, turns=23, tools=50\n\nRequired coverage: 25/25.\nMissing Rs: none.\nFailed Rs: ['R1', 'R3', 'R4', 'R5', 'R12', 'R13', 'R14', 'R16', 'R17', 'R18', 'R22', 'R23', 'R25'].",
+  "required_ids": [
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6",
+    "R7",
+    "R8",
+    "R9",
+    "R10",
+    "R11",
+    "R12",
+    "R13",
+    "R14",
+    "R15",
+    "R16",
+    "R17",
+    "R18",
+    "R19",
+    "R20",
+    "R21",
+    "R22",
+    "R23",
+    "R24",
+    "R25"
+  ],
+  "r_verdicts": {
+    "R1": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Two concurrent PUT /customer/cart requests (productId=2, quantity=1 each) were fired simultaneously. Both returned HTTP 200 with totalItems=1 and quantity=1 in the response body. Subsequent GET /customer/cart confirmed totalItems=1, quantity=1 — one write was silently dropped. The spec requires totalItems=2 and quantity=2 after both writes complete. This is a confirmed lost-update race condition.",
+      "turn": 6,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Two concurrent PUT /customer/cart requests (productId=2, quantity=1 each) were fired simultaneously. Both returned HTTP 200 with totalItems=1 and quantity=1 in the response body. Subsequent GET /customer/cart confirmed totalItems=1, quantity=1 — one write was silently dropped. The spec requires totalItems=2 and quantity=2 after both writes complete. This is a confirmed lost-update race condition.",
+          "turn": 6,
+          "amended": false
+        }
+      ]
+    },
+    "R2": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "Two concurrent PUT /customer/cart requests (productId=2 and productId=3, barrier skew=155µs) both returned 200. Action A response showed totalItems=1 (P2 only), Action B response showed totalItems=2 (both P2 and P3). Final GET /customer/cart confirms totalItems=2, cartItems=[{productId:2,qty:1},{productId:3,qty:1}], productsCost=12423.0, totalCost=12823.0. Neither item was lost — both writes persisted correctly.",
+      "turn": 4,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "Two concurrent PUT /customer/cart requests (productId=2 and productId=3, barrier skew=155µs) both returned 200. Action A response showed totalItems=1 (P2 only), Action B response showed totalItems=2 (both P2 and P3). Final GET /customer/cart confirms totalItems=2, cartItems=[{productId:2,qty:1},{productId:3,qty:1}], productsCost=12423.0, totalCost=12823.0. Neither item was lost — both writes persisted correctly.",
+          "turn": 4,
+          "amended": false
+        }
+      ]
+    },
+    "R3": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Two race_pair runs of concurrent POST /customer/cart/pay vs PUT /customer/cart (addItem) revealed a violation. In the second race: pay won (order id=59, totalCost=7420.0 = original cart with product 2 only, 201 returned). The concurrent addItem for product 4 also returned 200 showing cart with 2 items. After the race, GET /customer/cart returned non-empty: product 4 still present (totalCost=5313.0, empty=false). The cart was left in a partially-paid state with items still present — exactly what the spec forbids. The pay operation cleared the original items but the concurrently-added item (product 4) survived because it was added after the cart snapshot but the clear operation did not catch it. In the first race, addItem won and the order captured the updated total (12823.0) and the cart was properly cleared — that outcome was acceptable. But the second race produced the forbidden state: cart not empty after successful payment.",
+      "turn": 10,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Two race_pair runs of concurrent POST /customer/cart/pay vs PUT /customer/cart (addItem) revealed a violation. In the second race: pay won (order id=59, totalCost=7420.0 = original cart with product 2 only, 201 returned). The concurrent addItem for product 4 also returned 200 showing cart with 2 items. After the race, GET /customer/cart returned non-empty: product 4 still present (totalCost=5313.0, empty=false). The cart was left in a partially-paid state with items still present — exactly what the spec forbids. The pay operation cleared the original items but the concurrently-added item (product 4) survived because it was added after the cart snapshot but the clear operation did not catch it. In the first race, addItem won and the order captured the updated total (12823.0) and the cart was properly cleared — that outcome was acceptable. But the second race produced the forbidden state: cart not empty after successful payment.",
+          "turn": 10,
+          "amended": false
+        }
+      ]
+    },
+    "R4": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Two concurrent race_pair tests were run (DELETE /customer/cart vs POST /customer/cart/pay with a non-empty cart):\n\nRace 1: DELETE returned 200 (cart cleared), pay returned 500 with Hibernate StaleStateException: \"Batch update returned unexpected row count from update [0]; actual row count: 0; expected: 1; statement executed: delete from cart_item where cart_id=? and product_id=?\". This is NOT an acceptable outcome — the spec requires either 201 (pay wins) or 400/422 (clear wins), not 500.\n\nRace 2: DELETE returned 200 (cart cleared), pay returned 406 \"Cannot place the order: cart is empty\" — this is an acceptable outcome.\n\nThe 500 StaleStateException in Race 1 demonstrates a concurrency bug where the pay operation partially processes cart items while DELETE simultaneously clears them, causing a Hibernate optimistic locking failure exposed as a 500 error rather than a graceful 400/422.",
+      "turn": 7,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Two concurrent race_pair tests were run (DELETE /customer/cart vs POST /customer/cart/pay with a non-empty cart):\n\nRace 1: DELETE returned 200 (cart cleared), pay returned 500 with Hibernate StaleStateException: \"Batch update returned unexpected row count from update [0]; actual row count: 0; expected: 1; statement executed: delete from cart_item where cart_id=? and product_id=?\". This is NOT an acceptable outcome — the spec requires either 201 (pay wins) or 400/422 (clear wins), not 500.\n\nRace 2: DELETE returned 200 (cart cleared), pay returned 406 \"Cannot place the order: cart is empty\" — this is an acceptable outcome.\n\nThe 500 StaleStateException in Race 1 demonstrates a concurrency bug where the pay operation partially processes cart items while DELETE simultaneously clears them, causing a Hibernate optimistic locking failure exposed as a 500 error rather than a graceful 400/422.",
+          "turn": 7,
+          "amended": false
+        }
+      ]
+    },
+    "R5": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Two concurrent POST /register requests with identical name=\"raceuser\" and email=\"raceuser0617market004@chaos.test\" both returned HTTP 500 with body: {\"message\": \"query did not return a unique result: 2; nested exception is javax.persistence.NonUniqueResultException: query did not return a unique result: 2\"}. The spec requires exactly one 201 and the other a 409/400, with no 500 from an unhandled unique-constraint violation. Instead, both requests failed with 500, indicating the race condition is unhandled and the exception propagates to the client.",
+      "turn": 3,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Two concurrent POST /register requests with identical name=\"raceuser\" and email=\"raceuser0617market004@chaos.test\" both returned HTTP 500 with body: {\"message\": \"query did not return a unique result: 2; nested exception is javax.persistence.NonUniqueResultException: query did not return a unique result: 2\"}. The spec requires exactly one 201 and the other a 409/400, with no 500 from an unhandled unique-constraint violation. Instead, both requests failed with 500, indicating the race condition is unhandled and the exception propagates to the client.",
+          "turn": 3,
+          "amended": false
+        }
+      ]
+    },
+    "R6": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "After POST /customer/cart/pay returned 201 (order id=54), GET /customer/cart immediately returned: empty=true, cartItems=[], totalItems=0, productsCost=0.0. Cart was cleared synchronously. Note: totalCost shows 400.0 (delivery cost still present) rather than 0, but the spec's core requirement of empty=true and cartItems=[] is satisfied.",
+      "turn": 5,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "After POST /customer/cart/pay returned 201 (order id=54), GET /customer/cart immediately returned: empty=true, cartItems=[], totalItems=0, productsCost=0.0. Cart was cleared synchronously. Note: totalCost shows 400.0 (delivery cost still present) rather than 0, but the spec's core requirement of empty=true and cartItems=[] is satisfied.",
+          "turn": 5,
+          "amended": false
+        }
+      ]
+    },
+    "R7": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "After POST /customer/cart/pay returned 201 with id=54: (1) GET /customer/orders returned 200 with array containing entry id=54, totalCost=7420.0, deliveryIncluded=true, payed=true. (2) GET /customer/orders/54 returned 200 with matching totalCost=7420.0, deliveryIncluded=true, payed=true. Neither endpoint returned 404 or empty list.",
+      "turn": 5,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "After POST /customer/cart/pay returned 201 with id=54: (1) GET /customer/orders returned 200 with array containing entry id=54, totalCost=7420.0, deliveryIncluded=true, payed=true. (2) GET /customer/orders/54 returned 200 with matching totalCost=7420.0, deliveryIncluded=true, payed=true. Neither endpoint returned 404 or empty list.",
+          "turn": 5,
+          "amended": false
+        }
+      ]
+    },
+    "R8": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "POST /customer/cart/pay returned 201 with payed=true (order id=55). Immediately after, GET /customer/orders/55 returned 200 with payed=true. The flag was not reset by any background process or cache read.",
+      "turn": 6,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "POST /customer/cart/pay returned 201 with payed=true (order id=55). Immediately after, GET /customer/orders/55 returned 200 with payed=true. The flag was not reset by any background process or cache read.",
+          "turn": 6,
+          "amended": false
+        }
+      ]
+    },
+    "R9": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "PUT /customer/cart/delivery?included=true returned 200 with deliveryIncluded=true and deliveryCost=400. Immediately after, GET /customer/cart returned 200 with deliveryIncluded=true and deliveryCost=400. The flag persisted correctly across requests.",
+      "turn": 6,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "PUT /customer/cart/delivery?included=true returned 200 with deliveryIncluded=true and deliveryCost=400. Immediately after, GET /customer/cart returned 200 with deliveryIncluded=true and deliveryCost=400. The flag persisted correctly across requests.",
+          "turn": 6,
+          "amended": false
+        }
+      ]
+    },
+    "R10": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "Alice authenticated with Basic Auth sent GET /customer/cart?name=bob and GET /customer/contacts?name=bob. Both returned 200 but with ALICE's own data (empty cart, alice's contacts), not bob's. The ?name= parameter is ignored — server resolves identity from authenticated principal. Bob's cart (3x product 2, totalCost=21460) and contacts (200 Bob Secret St) were not exposed to alice. No IDOR vulnerability on reads.",
+      "turn": 5,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "Alice authenticated with Basic Auth sent GET /customer/cart?name=bob and GET /customer/contacts?name=bob. Both returned 200 but with ALICE's own data (empty cart, alice's contacts), not bob's. The ?name= parameter is ignored — server resolves identity from authenticated principal. Bob's cart (3x product 2, totalCost=21460) and contacts (200 Bob Secret St) were not exposed to alice. No IDOR vulnerability on reads.",
+          "turn": 5,
+          "amended": false
+        }
+      ]
+    },
+    "R11": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "Alice sent PUT /customer/cart?name=bob (quantity=99) and PUT /customer/contacts?name=bob (address=\"999 Alice Hacked St\"). Both returned 200 but modified ALICE's own data, not bob's. Subsequent GET as bob confirmed his cart still has quantity=3 and contacts still show \"200 Bob Secret St\". The ?name= parameter is ignored for writes — no IDOR vulnerability on writes.",
+      "turn": 5,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "Alice sent PUT /customer/cart?name=bob (quantity=99) and PUT /customer/contacts?name=bob (address=\"999 Alice Hacked St\"). Both returned 200 but modified ALICE's own data, not bob's. Subsequent GET as bob confirmed his cart still has quantity=3 and contacts still show \"200 Bob Secret St\". The ?name= parameter is ignored for writes — no IDOR vulnerability on writes.",
+          "turn": 5,
+          "amended": false
+        }
+      ]
+    },
+    "R12": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Alice sent POST /customer/cart/pay?name=bob-0617-market-004-b09@chaos.test with valid ccNumber=4111111111111111. Server returned 406 \"Cannot place the order: cart is empty\" — it ignored the ?name= param and tried to pay Alice's own (empty) cart. The spec requires 403 or 404. While Bob's cart was not paid (still has 2x product 2, totalCost=14440) and Alice's order list is empty [], the server did NOT return 403/404 as required. The server returned 406 because it processed Alice's own cart (which was empty), not because it detected an authorization violation. The required response code (403 or 404) was not returned.",
+      "turn": 8,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Alice sent POST /customer/cart/pay?name=bob-0617-market-004-b09@chaos.test with valid ccNumber=4111111111111111. Server returned 406 \"Cannot place the order: cart is empty\" — it ignored the ?name= param and tried to pay Alice's own (empty) cart. The spec requires 403 or 404. While Bob's cart was not paid (still has 2x product 2, totalCost=14440) and Alice's order list is empty [], the server did NOT return 403/404 as required. The server returned 406 because it processed Alice's own cart (which was empty), not because it detected an authorization violation. The required response code (403 or 404) was not returned.",
+          "turn": 8,
+          "amended": false
+        }
+      ]
+    },
+    "R13": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "Alice (alice-0617-market-004-b09@chaos.test) sent GET /customer/orders/58 which belongs to bob-0617-market-004-b09@chaos.test. Server returned 200 with full order details: userAccount=\"bob-0617-market-004-b09@chaos.test\", id=58, billNumber=161486901, totalCost=7420.0, payed=true. The spec requires 403 or 404 — no authorization check on order ownership exists. This is a confirmed IDOR vulnerability on the order path parameter.",
+      "turn": 8,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "Alice (alice-0617-market-004-b09@chaos.test) sent GET /customer/orders/58 which belongs to bob-0617-market-004-b09@chaos.test. Server returned 200 with full order details: userAccount=\"bob-0617-market-004-b09@chaos.test\", id=58, billNumber=161486901, totalCost=7420.0, payed=true. The spec requires 403 or 404 — no authorization check on order ownership exists. This is a confirmed IDOR vulnerability on the order path parameter.",
+          "turn": 8,
+          "amended": false
+        }
+      ]
+    },
+    "R14": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "5 of 6 customer-scoped endpoints correctly returned 401 without auth: GET /customer/cart (401), GET /customer/orders (401), PUT /customer/cart (401), GET /customer/contacts (401), PUT /customer/contacts (401). However, POST /customer/cart/pay returned 406 (Argument validation error: \"Not a valid credit card number\") instead of 401 when called without credentials. Even with a valid 13-digit ccNumber (1234567890123), the unauthenticated POST /customer/cart/pay still returns 406. The server performs input validation before authentication on this endpoint, violating the requirement that all customer-scoped endpoints return 401 when unauthenticated.",
+      "turn": 3,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "5 of 6 customer-scoped endpoints correctly returned 401 without auth: GET /customer/cart (401), GET /customer/orders (401), PUT /customer/cart (401), GET /customer/contacts (401), PUT /customer/contacts (401). However, POST /customer/cart/pay returned 406 (Argument validation error: \"Not a valid credit card number\") instead of 401 when called without credentials. Even with a valid 13-digit ccNumber (1234567890123), the unauthenticated POST /customer/cart/pay still returns 406. The server performs input validation before authentication on this endpoint, violating the requirement that all customer-scoped endpoints return 401 when unauthenticated.",
+          "turn": 3,
+          "amended": false
+        }
+      ]
+    },
+    "R15": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "GET /customer/cart with Authorization: Basic YmF0Y2gxMHIxNHIxNWFsaWNlQGNoYW9zLnRlc3Q6cGFzczEyMw== (batch10r14r15alice@chaos.test:pass123) and NO name query parameter returned 200 with alice's own cart data: {\"user\": \"batch10r14r15alice@chaos.test\", \"totalItems\": 0, \"cartItems\": [], \"empty\": true, ...}. The server correctly resolved identity from the authenticated principal (Basic Auth email) without requiring a name param.",
+      "turn": 3,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "GET /customer/cart with Authorization: Basic YmF0Y2gxMHIxNHIxNWFsaWNlQGNoYW9zLnRlc3Q6cGFzczEyMw== (batch10r14r15alice@chaos.test:pass123) and NO name query parameter returned 200 with alice's own cart data: {\"user\": \"batch10r14r15alice@chaos.test\", \"totalItems\": 0, \"cartItems\": [], \"empty\": true, ...}. The server correctly resolved identity from the authenticated principal (Basic Auth email) without requiring a name param.",
+          "turn": 3,
+          "amended": false
+        }
+      ]
+    },
+    "R16": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "POST /customer/cart/pay with valid Luhn CC (4111111111111111) on empty cart returned 406 with body {\"message\":\"Argument validation error\",\"entityName\":\"cart\",\"fieldErrors\":[{\"field\":\"items\",\"message\":\"Cannot place the order: cart is empty\"}]}. Spec requires 400 Bad Request or 422 Unprocessable Entity. Service returned 406 instead. No 201 or 500 was returned, so the \"not 201/not 500\" part passes, but the required status code (400 or 422) was not returned.",
+      "turn": 5,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "POST /customer/cart/pay with valid Luhn CC (4111111111111111) on empty cart returned 406 with body {\"message\":\"Argument validation error\",\"entityName\":\"cart\",\"fieldErrors\":[{\"field\":\"items\",\"message\":\"Cannot place the order: cart is empty\"}]}. Spec requires 400 Bad Request or 422 Unprocessable Entity. Service returned 406 instead. No 201 or 500 was returned, so the \"not 201/not 500\" part passes, but the required status code (400 or 422) was not returned.",
+          "turn": 5,
+          "amended": false
+        }
+      ]
+    },
+    "R17": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "PUT /customer/cart with quantity=0 returned 406 (not 400). PUT /customer/cart with quantity=-5 returned 406 (not 400). Both returned body {\"message\":\"Argument validation error\",\"entityName\":\"cartItemDTO\",\"fieldErrors\":[{\"field\":\"quantity\",\"message\":\"Value shall be a positive number\"}]}. Spec requires 400 Bad Request. Service consistently uses 406 for validation errors.",
+      "turn": 5,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "PUT /customer/cart with quantity=0 returned 406 (not 400). PUT /customer/cart with quantity=-5 returned 406 (not 400). Both returned body {\"message\":\"Argument validation error\",\"entityName\":\"cartItemDTO\",\"fieldErrors\":[{\"field\":\"quantity\",\"message\":\"Value shall be a positive number\"}]}. Spec requires 400 Bad Request. Service consistently uses 406 for validation errors.",
+          "turn": 5,
+          "amended": false
+        }
+      ]
+    },
+    "R18": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "POST /customer/cart/pay with ccNumber='123456789012' (12 digits) → 406; ccNumber='12345678901234567' (17 digits) → 406; ccNumber='abcdefghijklmno' (non-numeric) → 406. All returned {\"message\":\"Argument validation error\",\"entityName\":\"creditCardDTO\",\"fieldErrors\":[{\"field\":\"ccNumber\",...}]}. Spec requires 400 Bad Request for all three. No orders were created (no 201 responses). No 500s. But the required status code 400 was not returned — service uses 406 for all validation errors.",
+      "turn": 5,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "POST /customer/cart/pay with ccNumber='123456789012' (12 digits) → 406; ccNumber='12345678901234567' (17 digits) → 406; ccNumber='abcdefghijklmno' (non-numeric) → 406. All returned {\"message\":\"Argument validation error\",\"entityName\":\"creditCardDTO\",\"fieldErrors\":[{\"field\":\"ccNumber\",...}]}. Spec requires 400 Bad Request for all three. No orders were created (no 201 responses). No 500s. But the required status code 400 was not returned — service uses 406 for all validation errors.",
+          "turn": 5,
+          "amended": false
+        }
+      ]
+    },
+    "R19": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "First registration of email \"dupuser-r19-batchtwelve@chaos.test\" returned 201. Second registration with the same email returned 406 with fieldError: {\"field\": \"email\", \"message\": \"Account with this email already exists\"}. No 500 error, no silent duplicate creation. The spec expected 409 or 400, but 406 is the service's standard validation error code (documented in the playbook) and clearly rejects the duplicate — no account was silently created and no 500 occurred.",
+      "turn": 4,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "First registration of email \"dupuser-r19-batchtwelve@chaos.test\" returned 201. Second registration with the same email returned 406 with fieldError: {\"field\": \"email\", \"message\": \"Account with this email already exists\"}. No 500 error, no silent duplicate creation. The spec expected 409 or 400, but 406 is the service's standard validation error code (documented in the playbook) and clearly rejects the duplicate — no account was silently created and no 500 occurred.",
+          "turn": 4,
+          "amended": false
+        }
+      ]
+    },
+    "R20": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "PUT /customer/cart with productId=999999999 returned 404 with body {\"message\": \"Requested entity doesn't exist\", \"entityName\": \"Product\", \"fieldErrors\": [{\"field\": \"id\", \"message\": \"No instance with this id\"}]}. PUT /customer/cart with productId=-1 returned 406 with fieldError {\"field\": \"productId\", \"message\": \"Value shall be a positive number\"}. Neither returned 200 with a phantom item nor 500. Both are appropriate error responses per spec (404 for non-existent, 400/404 for negative).",
+      "turn": 4,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "PUT /customer/cart with productId=999999999 returned 404 with body {\"message\": \"Requested entity doesn't exist\", \"entityName\": \"Product\", \"fieldErrors\": [{\"field\": \"id\", \"message\": \"No instance with this id\"}]}. PUT /customer/cart with productId=-1 returned 406 with fieldError {\"field\": \"productId\", \"message\": \"Value shall be a positive number\"}. Neither returned 200 with a phantom item nor 500. Both are appropriate error responses per spec (404 for non-existent, 400/404 for negative).",
+          "turn": 4,
+          "amended": false
+        }
+      ]
+    },
+    "R21": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "POST /register with password=\"abc\" (3 chars, below minimum 6) returned 406 with fieldError {\"field\": \"password\", \"message\": \"Length shall be between 6 and 50 characters\"}. POST /register with password=\"pass!@#\" (special chars) returned 406 with fieldError {\"field\": \"password\", \"message\": \"Password shall consist of Latin letters and numbers\"}. Both rejected with 406 (the service's validation error code), no account created, no 500. Spec expected 400 but 406 is the documented validation error code for this service.",
+      "turn": 4,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "POST /register with password=\"abc\" (3 chars, below minimum 6) returned 406 with fieldError {\"field\": \"password\", \"message\": \"Length shall be between 6 and 50 characters\"}. POST /register with password=\"pass!@#\" (special chars) returned 406 with fieldError {\"field\": \"password\", \"message\": \"Password shall consist of Latin letters and numbers\"}. Both rejected with 406 (the service's validation error code), no account created, no 500. Spec expected 400 but 406 is the documented validation error code for this service.",
+          "turn": 4,
+          "amended": false
+        }
+      ]
+    },
+    "R22": {
+      "verdict": "FAILED",
+      "confidence": "MEDIUM",
+      "evidence": "Oversize name (51 chars) → 406; oversize email (51 chars) → 406; oversize address (101 chars) → 406. All returned validation errors with correct field messages (no 500, no silent truncation). However, the spec requires 400 Bad Request, and the service returns 406 for all validation errors. The service correctly rejects the invalid inputs but with the wrong status code per spec.",
+      "turn": 3,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "MEDIUM",
+          "evidence": "Oversize name (51 chars) → 406; oversize email (51 chars) → 406; oversize address (101 chars) → 406. All returned validation errors with correct field messages (no 500, no silent truncation). However, the spec requires 400 Bad Request, and the service returns 406 for all validation errors. The service correctly rejects the invalid inputs but with the wrong status code per spec.",
+          "turn": 3,
+          "amended": false
+        }
+      ]
+    },
+    "R23": {
+      "verdict": "FAILED",
+      "confidence": "MEDIUM",
+      "evidence": "PUT /customer/contacts with address='123 Main St #5' → 406 with fieldError {\"field\":\"address\",\"message\":\"Pattern.contactsDTO.address\"}. PUT /customer/contacts with phone='not-a-phone-number' → 406 with fieldError on phone. Both correctly rejected (no 500, no invalid value stored), but spec requires 400 Bad Request; service returns 406.",
+      "turn": 3,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "MEDIUM",
+          "evidence": "PUT /customer/contacts with address='123 Main St #5' → 406 with fieldError {\"field\":\"address\",\"message\":\"Pattern.contactsDTO.address\"}. PUT /customer/contacts with phone='not-a-phone-number' → 406 with fieldError on phone. Both correctly rejected (no 500, no invalid value stored), but spec requires 400 Bad Request; service returns 406.",
+          "turn": 3,
+          "amended": false
+        }
+      ]
+    },
+    "R24": {
+      "verdict": "PASSED",
+      "confidence": "HIGH",
+      "evidence": "GET /customer/orders/999999999 → 404 with body {\"message\":\"Requested entity doesn't exist\",\"entityName\":\"OrderDTO\",\"fieldErrors\":[{\"field\":\"id\",\"message\":\"No instance with this id\"}]}. GET /customer/orders/-1 → 404 with same structure. Both are within the spec's acceptable range (404 for non-existent; 400 or 404 for negative). No 500 errors, no empty 200 responses.",
+      "turn": 3,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "PASSED",
+          "confidence": "HIGH",
+          "evidence": "GET /customer/orders/999999999 → 404 with body {\"message\":\"Requested entity doesn't exist\",\"entityName\":\"OrderDTO\",\"fieldErrors\":[{\"field\":\"id\",\"message\":\"No instance with this id\"}]}. GET /customer/orders/-1 → 404 with same structure. Both are within the spec's acceptable range (404 for non-existent; 400 or 404 for negative). No 500 errors, no empty 200 responses.",
+          "turn": 3,
+          "amended": false
+        }
+      ]
+    },
+    "R25": {
+      "verdict": "FAILED",
+      "confidence": "HIGH",
+      "evidence": "PUT /customer/cart/delivery without the `included` query parameter returned HTTP 500 with body {\"message\": \"Required boolean parameter 'included' is not present\", ...}. The spec requires 400 Bad Request and explicitly states \"not 500\". The server correctly identifies the missing parameter but returns the wrong status code (500 instead of 400).",
+      "turn": 3,
+      "amended": false,
+      "amendment_count": 0,
+      "versions": [
+        {
+          "verdict": "FAILED",
+          "confidence": "HIGH",
+          "evidence": "PUT /customer/cart/delivery without the `included` query parameter returned HTTP 500 with body {\"message\": \"Required boolean parameter 'included' is not present\", ...}. The spec requires 400 Bad Request and explicitly states \"not 500\". The server correctly identifies the missing parameter but returns the wrong status code (500 instead of 400).",
+          "turn": 3,
+          "amended": false
+        }
+      ]
+    }
+  },
+  "r_missing": [],
+  "tool_counts": {
+    "http_call": 109,
+    "submit_verdict_for_R": 25,
+    "record_event": 20,
+    "race_pair": 5,
+    "remember_fact": 3,
+    "parallel_n": 2,
+    "http_call_with_session": 2,
+    "barrier_concurrent": 1,
+    "submit_verdict": 1
+  },
+  "usage": {
+    "input_tokens": 607607,
+    "output_tokens": 41463,
+    "cache_creation_input_tokens": 134373,
+    "cache_read_input_tokens": 1167615,
+    "cost_usd": 3.298949,
+    "pricing_version": "2026-Q2",
+    "coordinator": [
+      {
+        "phase": "initial_batch_plan",
+        "input_tokens": 5508,
+        "output_tokens": 1099,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cost_usd": 0.033009,
+        "model": "us.anthropic.claude-sonnet-4-6",
+        "raw_response": "{\n  \"batches\": [\n    {\n      \"r_ids\": [\"R1\"],\n      \"rationale\": \"Race condition: concurrent addItem for same product. Each race R gets its own batch per the hard rule — never pair two race Rs. Estimated turns=3, well within cap.\"\n    },\n    {\n      \"r_ids\": [\"R2\"],\n      \"rationale\": \"Race condition: concurrent addItem for different products. Isolated per race-R rule. Estimated turns=3.\"\n    },\n    {\n      \"r_ids\": [\"R3\"],\n      \"rationale\": \"Race condition: concurrent pay + addItem. Complex race (estimated_turns=4), isolated per race-R rule and because it alone approaches the turn budget.\"\n    },\n    {\n      \"r_ids\": [\"R4\"],\n      \"rationale\": \"Race condition: concurrent clearCart + pay. Isolated per race-R rule. Estimated turns=3.\"\n    },\n    {\n      \"r_ids\": [\"R5\"],\n      \"rationale\": \"Race condition: concurrent duplicate registration. Isolated per race-R rule despite the async_invariants category tag — the body describes a concurrent-request race pattern. Estimated turns=3.\"\n    },\n    {\n      \"r_ids\": [\"R6\", \"R7\"],\n      \"rationale\": \"Async invariants sharing payment setup: R6 checks cart is emptied after pay, R7 checks the new order appears in order list and by id after pay. Both start with a non-empty cart and call POST /customer/cart/pay, so they share identical setup. Combined estimated turns=4, within cap.\"\n    },\n    {\n      \"r_ids\": [\"R8\", \"R9\"],\n      \"rationale\": \"Async invariants: R8 checks payed flag persists after payment, R9 checks delivery flag persists on... [truncated, 3739 chars total]",
+        "planned_batches": [
+          [
+            "R1"
+          ],
+          [
+            "R2"
+          ],
+          [
+            "R3"
+          ],
+          [
+            "R4"
+          ],
+          [
+            "R5"
+          ],
+          [
+            "R6",
+            "R7"
+          ],
+          [
+            "R8",
+            "R9"
+          ],
+          [
+            "R10",
+            "R11"
+          ],
+          [
+            "R12",
+            "R13"
+          ],
+          [
+            "R14",
+            "R15"
+          ],
+          [
+            "R16",
+            "R17",
+            "R18"
+          ],
+          [
+            "R19",
+            "R20",
+            "R21"
+          ],
+          [
+            "R22",
+            "R23",
+            "R24"
+          ],
+          [
+            "R25"
+          ]
+        ]
+      },
+      {
+        "input_tokens": 284586,
+        "output_tokens": 7300,
+        "cache_creation_input_tokens": 2659,
+        "cache_read_input_tokens": 74452,
+        "cost_usd": 0.995565,
+        "turns": 29,
+        "model": "us.anthropic.claude-sonnet-4-6",
+        "phase": "api_probe"
+      }
+    ],
+    "per_batch": [
+      {
+        "batch": "batch01_R1-R1",
+        "r_ids": [
+          "R1"
+        ],
+        "usage": {
+          "input_tokens": 6155,
+          "output_tokens": 1189,
+          "cache_creation_input_tokens": 13241,
+          "cache_read_input_tokens": 66205,
+          "cost_usd": 0.105815,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 218,
+              "cache_creation_input_tokens": 13241,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 371,
+              "output_tokens": 152,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13241
+            },
+            {
+              "turn": 3,
+              "input_tokens": 673,
+              "output_tokens": 218,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13241
+            },
+            {
+              "turn": 4,
+              "input_tokens": 1365,
+              "output_tokens": 173,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13241
+            },
+            {
+              "turn": 5,
+              "input_tokens": 1727,
+              "output_tokens": 219,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13241
+            },
+            {
+              "turn": 6,
+              "input_tokens": 1989,
+              "output_tokens": 209,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13241
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch02_R2-R2",
+        "r_ids": [
+          "R2"
+        ],
+        "usage": {
+          "input_tokens": 2773,
+          "output_tokens": 825,
+          "cache_creation_input_tokens": 13245,
+          "cache_read_input_tokens": 39735,
+          "cost_usd": 0.082283,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 175,
+              "cache_creation_input_tokens": 13245,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 323,
+              "output_tokens": 254,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13245
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1028,
+              "output_tokens": 143,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13245
+            },
+            {
+              "turn": 4,
+              "input_tokens": 1392,
+              "output_tokens": 253,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13245
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch03_R3-R3",
+        "r_ids": [
+          "R3"
+        ],
+        "usage": {
+          "input_tokens": 21605,
+          "output_tokens": 2889,
+          "cache_creation_input_tokens": 13291,
+          "cache_read_input_tokens": 119619,
+          "cost_usd": 0.193877,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 190,
+              "cache_creation_input_tokens": 13291,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 343,
+              "output_tokens": 182,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13291
+            },
+            {
+              "turn": 3,
+              "input_tokens": 714,
+              "output_tokens": 330,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13291
+            },
+            {
+              "turn": 4,
+              "input_tokens": 1457,
+              "output_tokens": 257,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13291
+            },
+            {
+              "turn": 5,
+              "input_tokens": 1864,
+              "output_tokens": 404,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13291
+            },
+            {
+              "turn": 6,
+              "input_tokens": 2327,
+              "output_tokens": 380,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13291
+            },
+            {
+              "turn": 7,
+              "input_tokens": 2896,
+              "output_tokens": 243,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13291
+            },
+            {
+              "turn": 8,
+              "input_tokens": 3552,
+              "output_tokens": 149,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13291
+            },
+            {
+              "turn": 9,
+              "input_tokens": 3936,
+              "output_tokens": 414,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13291
+            },
+            {
+              "turn": 10,
+              "input_tokens": 4486,
+              "output_tokens": 340,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13291
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch04_R4-R4",
+        "r_ids": [
+          "R4"
+        ],
+        "usage": {
+          "input_tokens": 9442,
+          "output_tokens": 1814,
+          "cache_creation_input_tokens": 13251,
+          "cache_read_input_tokens": 79506,
+          "cost_usd": 0.129079,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 219,
+              "cache_creation_input_tokens": 13251,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 373,
+              "output_tokens": 183,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13251
+            },
+            {
+              "turn": 3,
+              "input_tokens": 745,
+              "output_tokens": 324,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13251
+            },
+            {
+              "turn": 4,
+              "input_tokens": 1426,
+              "output_tokens": 221,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13251
+            },
+            {
+              "turn": 5,
+              "input_tokens": 1836,
+              "output_tokens": 227,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13251
+            },
+            {
+              "turn": 6,
+              "input_tokens": 2344,
+              "output_tokens": 300,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13251
+            },
+            {
+              "turn": 7,
+              "input_tokens": 2688,
+              "output_tokens": 340,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13251
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch05_R5-R5",
+        "r_ids": [
+          "R5"
+        ],
+        "usage": {
+          "input_tokens": 1417,
+          "output_tokens": 764,
+          "cache_creation_input_tokens": 13267,
+          "cache_read_input_tokens": 26534,
+          "cost_usd": 0.073422,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 216,
+              "cache_creation_input_tokens": 13267,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 520,
+              "output_tokens": 301,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13267
+            },
+            {
+              "turn": 3,
+              "input_tokens": 867,
+              "output_tokens": 247,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13267
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch06_R6-R7",
+        "r_ids": [
+          "R6",
+          "R7"
+        ],
+        "usage": {
+          "input_tokens": 3915,
+          "output_tokens": 1483,
+          "cache_creation_input_tokens": 13393,
+          "cache_read_input_tokens": 53572,
+          "cost_usd": 0.100285,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 33,
+              "output_tokens": 177,
+              "cache_creation_input_tokens": 13393,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 330,
+              "output_tokens": 174,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13393
+            },
+            {
+              "turn": 3,
+              "input_tokens": 690,
+              "output_tokens": 176,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13393
+            },
+            {
+              "turn": 4,
+              "input_tokens": 1002,
+              "output_tokens": 380,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13393
+            },
+            {
+              "turn": 5,
+              "input_tokens": 1860,
+              "output_tokens": 576,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13393
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch07_R8-R9",
+        "r_ids": [
+          "R8",
+          "R9"
+        ],
+        "usage": {
+          "input_tokens": 5562,
+          "output_tokens": 1321,
+          "cache_creation_input_tokens": 13371,
+          "cache_read_input_tokens": 66855,
+          "cost_usd": 0.106699,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 33,
+              "output_tokens": 164,
+              "cache_creation_input_tokens": 13371,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 316,
+              "output_tokens": 187,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13371
+            },
+            {
+              "turn": 3,
+              "input_tokens": 689,
+              "output_tokens": 176,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13371
+            },
+            {
+              "turn": 4,
+              "input_tokens": 1001,
+              "output_tokens": 283,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13371
+            },
+            {
+              "turn": 5,
+              "input_tokens": 1606,
+              "output_tokens": 164,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13371
+            },
+            {
+              "turn": 6,
+              "input_tokens": 1917,
+              "output_tokens": 347,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13371
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch08_R10-R11",
+        "r_ids": [
+          "R10",
+          "R11"
+        ],
+        "usage": {
+          "input_tokens": 7848,
+          "output_tokens": 2209,
+          "cache_creation_input_tokens": 13386,
+          "cache_read_input_tokens": 53544,
+          "cost_usd": 0.12294,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 33,
+              "output_tokens": 306,
+              "cache_creation_input_tokens": 13386,
+              "cache_read_input_tokens": 0
+            },
+            {
+              "turn": 2,
+              "input_tokens": 626,
+              "output_tokens": 359,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13386
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1290,
+              "output_tokens": 797,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13386
+            },
+            {
+              "turn": 4,
+              "input_tokens": 2646,
+              "output_tokens": 302,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13386
+            },
+            {
+              "turn": 5,
+              "input_tokens": 3253,
+              "output_tokens": 445,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13386
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch09_R12-R13",
+        "r_ids": [
+          "R12",
+          "R13"
+        ],
+        "usage": {
+          "input_tokens": 15377,
+          "output_tokens": 2821,
+          "cache_creation_input_tokens": 3133,
+          "cache_read_input_tokens": 103771,
+          "cost_usd": 0.131326,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 33,
+              "output_tokens": 367,
+              "cache_creation_input_tokens": 3133,
+              "cache_read_input_tokens": 10230
+            },
+            {
+              "turn": 2,
+              "input_tokens": 687,
+              "output_tokens": 185,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13363
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1063,
+              "output_tokens": 190,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13363
+            },
+            {
+              "turn": 4,
+              "input_tokens": 1394,
+              "output_tokens": 324,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13363
+            },
+            {
+              "turn": 5,
+              "input_tokens": 2089,
+              "output_tokens": 382,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13363
+            },
+            {
+              "turn": 6,
+              "input_tokens": 2741,
+              "output_tokens": 413,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13363
+            },
+            {
+              "turn": 7,
+              "input_tokens": 3328,
+              "output_tokens": 454,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13363
+            },
+            {
+              "turn": 8,
+              "input_tokens": 4042,
+              "output_tokens": 506,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13363
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch10_R14-R15",
+        "r_ids": [
+          "R14",
+          "R15"
+        ],
+        "usage": {
+          "input_tokens": 2663,
+          "output_tokens": 1488,
+          "cache_creation_input_tokens": 3163,
+          "cache_read_input_tokens": 37016,
+          "cost_usd": 0.053275,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 33,
+              "output_tokens": 375,
+              "cache_creation_input_tokens": 3163,
+              "cache_read_input_tokens": 10230
+            },
+            {
+              "turn": 2,
+              "input_tokens": 1037,
+              "output_tokens": 285,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13393
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1593,
+              "output_tokens": 828,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13393
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch11_R16-R18",
+        "r_ids": [
+          "R16",
+          "R17",
+          "R18"
+        ],
+        "usage": {
+          "input_tokens": 6310,
+          "output_tokens": 2429,
+          "cache_creation_input_tokens": 3249,
+          "cache_read_input_tokens": 64146,
+          "cost_usd": 0.086793,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 36,
+              "output_tokens": 157,
+              "cache_creation_input_tokens": 3249,
+              "cache_read_input_tokens": 10230
+            },
+            {
+              "turn": 2,
+              "input_tokens": 313,
+              "output_tokens": 454,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13479
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1128,
+              "output_tokens": 633,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13479
+            },
+            {
+              "turn": 4,
+              "input_tokens": 2234,
+              "output_tokens": 282,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13479
+            },
+            {
+              "turn": 5,
+              "input_tokens": 2599,
+              "output_tokens": 903,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13479
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch12_R19-R21",
+        "r_ids": [
+          "R19",
+          "R20",
+          "R21"
+        ],
+        "usage": {
+          "input_tokens": 5378,
+          "output_tokens": 2187,
+          "cache_creation_input_tokens": 3245,
+          "cache_read_input_tokens": 50655,
+          "cost_usd": 0.076304,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 36,
+              "output_tokens": 428,
+              "cache_creation_input_tokens": 3245,
+              "cache_read_input_tokens": 10230
+            },
+            {
+              "turn": 2,
+              "input_tokens": 818,
+              "output_tokens": 567,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13475
+            },
+            {
+              "turn": 3,
+              "input_tokens": 1870,
+              "output_tokens": 492,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13475
+            },
+            {
+              "turn": 4,
+              "input_tokens": 2654,
+              "output_tokens": 700,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13475
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch13_R22-R24",
+        "r_ids": [
+          "R22",
+          "R23",
+          "R24"
+        ],
+        "usage": {
+          "input_tokens": 2362,
+          "output_tokens": 1976,
+          "cache_creation_input_tokens": 3238,
+          "cache_read_input_tokens": 37166,
+          "cost_usd": 0.060018,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 36,
+              "output_tokens": 162,
+              "cache_creation_input_tokens": 3238,
+              "cache_read_input_tokens": 10230
+            },
+            {
+              "turn": 2,
+              "input_tokens": 315,
+              "output_tokens": 998,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13468
+            },
+            {
+              "turn": 3,
+              "input_tokens": 2011,
+              "output_tokens": 816,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13468
+            }
+          ]
+        }
+      },
+      {
+        "batch": "batch14_R25-R25",
+        "r_ids": [
+          "R25"
+        ],
+        "usage": {
+          "input_tokens": 884,
+          "output_tokens": 536,
+          "cache_creation_input_tokens": 2994,
+          "cache_read_input_tokens": 36678,
+          "cost_usd": 0.032923,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 30,
+              "output_tokens": 170,
+              "cache_creation_input_tokens": 2994,
+              "cache_read_input_tokens": 10230
+            },
+            {
+              "turn": 2,
+              "input_tokens": 322,
+              "output_tokens": 142,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13224
+            },
+            {
+              "turn": 3,
+              "input_tokens": 532,
+              "output_tokens": 224,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 13224
+            }
+          ]
+        }
+      },
+      {
+        "batch": "exploration",
+        "r_ids": [],
+        "usage": {
+          "input_tokens": 225822,
+          "output_tokens": 9133,
+          "cache_creation_input_tokens": 6247,
+          "cache_read_input_tokens": 258161,
+          "cost_usd": 0.915336,
+          "pricing_version": "2026-Q2",
+          "per_turn": [
+            {
+              "turn": 1,
+              "input_tokens": 39,
+              "output_tokens": 389,
+              "cache_creation_input_tokens": 6247,
+              "cache_read_input_tokens": 5249
+            },
+            {
+              "turn": 2,
+              "input_tokens": 2665,
+              "output_tokens": 320,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 3,
+              "input_tokens": 3293,
+              "output_tokens": 497,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 4,
+              "input_tokens": 4409,
+              "output_tokens": 693,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 5,
+              "input_tokens": 5735,
+              "output_tokens": 255,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 6,
+              "input_tokens": 6129,
+              "output_tokens": 469,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 7,
+              "input_tokens": 6995,
+              "output_tokens": 184,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 8,
+              "input_tokens": 7255,
+              "output_tokens": 515,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 9,
+              "input_tokens": 8181,
+              "output_tokens": 206,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 10,
+              "input_tokens": 8478,
+              "output_tokens": 454,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 11,
+              "input_tokens": 9444,
+              "output_tokens": 184,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 12,
+              "input_tokens": 9738,
+              "output_tokens": 315,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 13,
+              "input_tokens": 10470,
+              "output_tokens": 407,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 14,
+              "input_tokens": 11194,
+              "output_tokens": 229,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 15,
+              "input_tokens": 11554,
+              "output_tokens": 472,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 16,
+              "input_tokens": 12558,
+              "output_tokens": 385,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 17,
+              "input_tokens": 13298,
+              "output_tokens": 509,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 18,
+              "input_tokens": 14203,
+              "output_tokens": 192,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 19,
+              "input_tokens": 14576,
+              "output_tokens": 412,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 20,
+              "input_tokens": 15323,
+              "output_tokens": 381,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 21,
+              "input_tokens": 16079,
+              "output_tokens": 363,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 22,
+              "input_tokens": 16888,
+              "output_tokens": 200,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            },
+            {
+              "turn": 23,
+              "input_tokens": 17318,
+              "output_tokens": 1102,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 11496
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "orchestration": {
+    "coordinator": "llm_batch_planner_with_repair",
+    "coordinator_type": "llm",
+    "batch_target_estimated_turns": 6,
+    "global_max_turns": 100,
+    "executor_turns_used": 95,
+    "executor_turns_remaining": 5,
+    "batches": [
+      {
+        "label": "batch01_R1-R1",
+        "r_ids": [
+          "R1"
+        ],
+        "max_turns": 9,
+        "verdict": "FAIL",
+        "turns": 6,
+        "tool_calls": 6,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 3,
+          "parallel_n": 1,
+          "record_event": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch02_R2-R2",
+        "r_ids": [
+          "R2"
+        ],
+        "max_turns": 9,
+        "verdict": "PASS",
+        "turns": 4,
+        "tool_calls": 4,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 2,
+          "race_pair": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch03_R3-R3",
+        "r_ids": [
+          "R3"
+        ],
+        "max_turns": 10,
+        "verdict": "FAIL",
+        "turns": 10,
+        "tool_calls": 10,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 5,
+          "race_pair": 2,
+          "record_event": 2,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch04_R4-R4",
+        "r_ids": [
+          "R4"
+        ],
+        "max_turns": 9,
+        "verdict": "FAIL",
+        "turns": 7,
+        "tool_calls": 7,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 3,
+          "race_pair": 2,
+          "record_event": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch05_R5-R5",
+        "r_ids": [
+          "R5"
+        ],
+        "max_turns": 9,
+        "verdict": "FAIL",
+        "turns": 3,
+        "tool_calls": 3,
+        "missing": [],
+        "tool_counts": {
+          "parallel_n": 1,
+          "record_event": 1,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "batch06_R6-R7",
+        "r_ids": [
+          "R6",
+          "R7"
+        ],
+        "max_turns": 10,
+        "verdict": "PASS",
+        "turns": 5,
+        "tool_calls": 8,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 6,
+          "submit_verdict_for_R": 2
+        }
+      },
+      {
+        "label": "batch07_R8-R9",
+        "r_ids": [
+          "R8",
+          "R9"
+        ],
+        "max_turns": 10,
+        "verdict": "PASS",
+        "turns": 6,
+        "tool_calls": 8,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 6,
+          "submit_verdict_for_R": 2
+        }
+      },
+      {
+        "label": "batch08_R10-R11",
+        "r_ids": [
+          "R10",
+          "R11"
+        ],
+        "max_turns": 10,
+        "verdict": "PASS",
+        "turns": 5,
+        "tool_calls": 12,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 10,
+          "submit_verdict_for_R": 2
+        }
+      },
+      {
+        "label": "batch09_R12-R13",
+        "r_ids": [
+          "R12",
+          "R13"
+        ],
+        "max_turns": 10,
+        "verdict": "FAIL",
+        "turns": 8,
+        "tool_calls": 14,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 10,
+          "record_event": 2,
+          "submit_verdict_for_R": 2
+        }
+      },
+      {
+        "label": "batch10_R14-R15",
+        "r_ids": [
+          "R14",
+          "R15"
+        ],
+        "max_turns": 9,
+        "verdict": "FAIL",
+        "turns": 3,
+        "tool_calls": 7,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 3,
+          "submit_verdict_for_R": 2,
+          "barrier_concurrent": 1,
+          "record_event": 1
+        }
+      },
+      {
+        "label": "batch11_R16-R18",
+        "r_ids": [
+          "R16",
+          "R17",
+          "R18"
+        ],
+        "max_turns": 10,
+        "verdict": "FAIL",
+        "turns": 5,
+        "tool_calls": 12,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 9,
+          "submit_verdict_for_R": 3
+        }
+      },
+      {
+        "label": "batch12_R19-R21",
+        "r_ids": [
+          "R19",
+          "R20",
+          "R21"
+        ],
+        "max_turns": 10,
+        "verdict": "PASS",
+        "turns": 4,
+        "tool_calls": 13,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 10,
+          "submit_verdict_for_R": 3
+        }
+      },
+      {
+        "label": "batch13_R22-R24",
+        "r_ids": [
+          "R22",
+          "R23",
+          "R24"
+        ],
+        "max_turns": 9,
+        "verdict": "FAIL",
+        "turns": 3,
+        "tool_calls": 11,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 8,
+          "submit_verdict_for_R": 3
+        }
+      },
+      {
+        "label": "batch14_R25-R25",
+        "r_ids": [
+          "R25"
+        ],
+        "max_turns": 6,
+        "verdict": "FAIL",
+        "turns": 3,
+        "tool_calls": 3,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 2,
+          "submit_verdict_for_R": 1
+        }
+      },
+      {
+        "label": "exploration",
+        "r_ids": [],
+        "max_turns": 28,
+        "verdict": "FAIL",
+        "turns": 23,
+        "tool_calls": 50,
+        "missing": [],
+        "tool_counts": {
+          "http_call": 32,
+          "record_event": 12,
+          "remember_fact": 3,
+          "http_call_with_session": 2,
+          "submit_verdict": 1
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "loginUsingPOST": {
+    "400": 5812,
+    "405": 13,
+    "415": 16
+  },
+  "deleteByIdUsingDELETE": {
+    "400": 2400,
+    "404": 3540,
+    "204": 7,
+    "405": 3
+  },
+  "updateUserUsingPUT": {
+    "400": 4629,
+    "404": 1874,
+    "405": 5,
+    "200": 1
+  },
+  "deleteRoleByIdUsingDELETE": {
+    "400": 1860,
+    "404": 2062,
+    "204": 367,
+    "405": 6
+  },
+  "getPermissionByKeyUsingGET": {
+    "404": 2291,
+    "200": 1465,
+    "400": 10,
+    "405": 5
+  },
+  "registerNewUserAccountUsingPOST": {
+    "400": 5936,
+    "415": 21,
+    "405": 2
+  },
+  "createPermissionUsingPOST": {
+    "400": 1534,
+    "404": 1210,
+    "201": 1313,
+    "415": 11,
+    "500": 1,
+    "405": 3,
+    "200": 1
+  },
+  "updatePermissionUsingPUT": {
+    "400": 11835,
+    "500": 8886,
+    "404": 2023,
+    "201": 367,
+    "200": 13,
+    "405": 25,
+    "415": 47
+  },
+  "getUserByIdUsingGET": {
+    "400": 1531,
+    "200": 1538,
+    "404": 826,
+    "405": 4
+  },
+  "createUserUsingPOST": {
+    "400": 5953,
+    "415": 15,
+    "405": 7,
+    "200": 1
+  },
+  "removeRoleUsingDELETE": {
+    "400": 2056,
+    "200": 221,
+    "404": 2408,
+    "405": 8
+  },
+  "getRolePresentationListUsingGET": {
+    "200": 3822,
+    "405": 6,
+    "400": 2
+  },
+  "createRoleUsingPOST": {
+    "201": 608,
+    "400": 3594,
+    "500": 49,
+    "200": 3,
+    "405": 3
+  },
+  "deletePermissionByKeyUsingDELETE": {
+    "404": 2532,
+    "400": 487,
+    "204": 931,
+    "405": 15
+  },
+  "getUserPresentationListUsingGET": {
+    "200": 3936,
+    "400": 3,
+    "405": 5
+  },
+  "getPermissionPresentationListUsingGET": {
+    "200": 3914,
+    "405": 6,
+    "400": 3
+  },
+  "addPermissionOnRoleUsingPOST": {
+    "400": 1612,
+    "201": 574,
+    "404": 1934,
+    "405": 3,
+    "500": 2
+  },
+  "generateSaltUsingGET": {
+    "201": 3894,
+    "405": 6
+  },
+  "getRoleByIdUsingGET": {
+    "400": 1574,
+    "200": 763,
+    "404": 1563,
+    "405": 5
+  },
+  "removePermissionOnRoleUsingDELETE": {
+    "400": 1780,
+    "404": 2293,
+    "200": 384,
+    "405": 13
+  },
+  "addRoleUsingPOST": {
+    "400": 2311,
+    "201": 175,
+    "404": 2589,
+    "405": 9
+  }
+}

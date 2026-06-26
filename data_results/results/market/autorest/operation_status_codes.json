@@ -1,0 +1,41 @@
+{
+  "getCustomerUsingGET": {
+    "500": 42624
+  },
+  "getCartUsingGET": {
+    "500": 6579
+  },
+  "getOrdersUsingGET": {
+    "500": 6457
+  },
+  "clearCartUsingDELETE": {
+    "500": 6452
+  },
+  "updateContactsUsingPUT": {
+    "500": 6516
+  },
+  "addItemUsingPUT": {
+    "500": 6415
+  },
+  "getOrderUsingGET": {
+    "500": 6573
+  },
+  "getProductsUsingGET": {
+    "500": 6562
+  },
+  "setDeliveryUsingPUT": {
+    "500": 6484
+  },
+  "createCustomerUsingPOST": {
+    "500": 6394
+  },
+  "payByCardUsingPOST": {
+    "500": 6403
+  },
+  "getProductUsingGET": {
+    "500": 6560
+  },
+  "getContactsUsingGET": {
+    "500": 6506
+  }
+}

@@ -1,0 +1,178 @@
+{
+  "getCustomerUsingGET": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "getCustomerUsingGET"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "getCustomerUsingGET"
+    }
+  ],
+  "getCartUsingGET": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "getCartUsingGET"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "getCartUsingGET"
+    }
+  ],
+  "getOrdersUsingGET": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "getOrdersUsingGET"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "getOrdersUsingGET"
+    }
+  ],
+  "clearCartUsingDELETE": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "clearCartUsingDELETE"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "clearCartUsingDELETE"
+    }
+  ],
+  "updateContactsUsingPUT": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "updateContactsUsingPUT"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "updateContactsUsingPUT"
+    },
+    {
+      "parameters": {},
+      "body": null,
+      "operation_id": "updateContactsUsingPUT"
+    }
+  ],
+  "addItemUsingPUT": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "addItemUsingPUT"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "addItemUsingPUT"
+    },
+    {
+      "parameters": {},
+      "body": null,
+      "operation_id": "addItemUsingPUT"
+    }
+  ],
+  "getOrderUsingGET": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "getOrderUsingGET"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "getOrderUsingGET"
+    }
+  ],
+  "getProductsUsingGET": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "getProductsUsingGET"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "getProductsUsingGET"
+    }
+  ],
+  "setDeliveryUsingPUT": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "setDeliveryUsingPUT"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "setDeliveryUsingPUT"
+    }
+  ],
+  "createCustomerUsingPOST": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "createCustomerUsingPOST"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "createCustomerUsingPOST"
+    },
+    {
+      "parameters": {},
+      "body": null,
+      "operation_id": "createCustomerUsingPOST"
+    }
+  ],
+  "payByCardUsingPOST": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "payByCardUsingPOST"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "payByCardUsingPOST"
+    },
+    {
+      "parameters": {},
+      "body": null,
+      "operation_id": "payByCardUsingPOST"
+    }
+  ],
+  "getProductUsingGET": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "getProductUsingGET"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "getProductUsingGET"
+    }
+  ],
+  "getContactsUsingGET": [
+    {
+      "parameters": null,
+      "body": null,
+      "operation_id": "getContactsUsingGET"
+    },
+    {
+      "parameters": {},
+      "body": {},
+      "operation_id": "getContactsUsingGET"
+    }
+  ]
+}

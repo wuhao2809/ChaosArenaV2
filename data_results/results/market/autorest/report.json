@@ -1,0 +1,27 @@
+{
+  "Title": "AutoRestTest Report for 'Api Documentation' (market)",
+  "Duration": "1200 seconds",
+  "Total Requests Sent": 120525,
+  "Status Code Distribution": {
+    "500": 120525
+  },
+  "Number of Total Operations": 13,
+  "Number of Successfully Processed Operations": 0,
+  "Percentage of Successfully Processed Operations": "0.0%",
+  "Number of Unique Server Errors": 16591,
+  "Operations with Server Errors": {
+    "getCustomerUsingGET": 42624,
+    "getCartUsingGET": 6579,
+    "getOrdersUsingGET": 6457,
+    "clearCartUsingDELETE": 6452,
+    "updateContactsUsingPUT": 6516,
+    "addItemUsingPUT": 6415,
+    "getOrderUsingGET": 6573,
+    "getProductsUsingGET": 6562,
+    "setDeliveryUsingPUT": 6484,
+    "createCustomerUsingPOST": 6394,
+    "payByCardUsingPOST": 6403,
+    "getProductUsingGET": 6560,
+    "getContactsUsingGET": 6506
+  }
+}
